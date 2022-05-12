@@ -1,0 +1,35 @@
+[package]
+name = "collector"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1.0.81" }
+thiserror = "1.0.30"
+deepsize = "0.2.0"
+
+# log
+slog = { version = "2.7.0", features = ["nested-values"] }
+slog-extlog = "8.0.0"
+slog-extlog-derive = "8.0.0"
+erased-serde = "0.3.20"
+
+duration-string = { version = "0.0.6", features = ["serde"] }
+
+# Async
+tokio = { version = "1.16.1", features = ["rt-multi-thread", "macros", "sync"] }
+async-trait = "0.1.52"
+
+config = "0.12.0"
+actix-web = "4"
+env_logger = "0.9.0"
+
+pepe-config = "0.0.2"
+pepe-log = "0.0.7"
+
+[[bin]]
+name = "service"
+path = "src/main.rs"
