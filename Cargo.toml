@@ -19,6 +19,8 @@ erased-serde = "0.3.20"
 
 duration-string = { version = "0.0.6", features = ["serde"] }
 
+kafka = "0.9"
+
 # Async
 tokio = { version = "1.16.1", features = ["rt-multi-thread", "macros", "sync"] }
 async-trait = "0.1.52"

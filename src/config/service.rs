@@ -9,4 +9,5 @@ pub struct ServiceConfig {
     pub max_len_chunk: usize,
     pub max_collect_chunk_duration: DurationString,
     pub hosts_by_topics: HashMap<String, Vec<String>>,
+    pub kafka_brokers: Vec<String>,
 }
