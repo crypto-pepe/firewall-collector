@@ -13,6 +13,7 @@ RUN cargo build --release
 
 # build app
 COPY ./src ./src
+COPY ./config.yaml ./
 RUN sed -i 's#dummy.rs#src/main.rs#' Cargo.toml
 RUN cargo build --release
 
