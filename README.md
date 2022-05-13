@@ -35,4 +35,8 @@ service:
 - `max_len_chunk`: maximum number requests in the chunk
 - `max_size_chunk`: maximum size chunk in bytes
 - `max_collect_chunk_duration`: how long does accumulate chunk
-- `hosts_by_topics`: ratio hosts to Kafka topics
+- `hosts_by_topics`: hosts to Kafka topics mapping
+
+## Requirements
+
+The topics from parameter `service.hosts_by_topics` of the config have to be created in the Kafka.
