@@ -59,7 +59,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(data.clone())
             .default_service(web::to(index))
     })
-    .bind(("127.0.0.1", port))?
+    .bind(("0.0.0.0", port))?
     .run()
     .await
 }
