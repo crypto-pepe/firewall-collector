@@ -4,9 +4,14 @@ The service collects HTTP requests into chunks by hosts and sending them to kafk
 
 ## Configuration
 
-Service can be configured via `.yaml` config file.
+### Environment variables
 
-Example:
+| Name        | Required | Note                                                                     |
+| ----------- | -------- | ------------------------------------------------------------------------ |
+| RUST_LOG    | NO       | Log level. https://docs.rs/env_logger/0.9.0/env_logger/#enabling-logging |
+| CONFIG_PATH | No       | Path to the `yaml` formatted config file                                 |
+
+YAML formatted config file example:
 
 ```yaml
 server:
@@ -18,12 +23,12 @@ service:
   max_collect_chunk_duration: 3s
   hosts_by_topics:
     topic1:
-      - "host1"
-      - "host2"
+      - 'host1'
+      - 'host2'
     topic2:
-      - "host3"
+      - 'host3'
   kafka_brokers:
-    - "localhost:9092"
+    - 'localhost:9092'
 ```
 
 - `payload_max_size`: maxumum size HTTP body in bytes
@@ -31,7 +36,3 @@ service:
 - `max_size_chunk`: maximum size chunk in bytes
 - `max_collect_chunk_duration`: how long does accumulate chunk
 - `hosts_by_topics`: ratio hosts to Kafka topics
-
-### Configuration for docker container
-
-Mount the config file to the container and pass `CONFIG_PATH=${config file path}` environment variable.
