@@ -1,11 +1,10 @@
-use crate::config::AppConfig;
+use crate::config::ServiceConfig;
 use deepsize::DeepSizeOf;
-use pepe_log::{error, warn};
+use pepe_log::warn;
 use serde::Serialize;
 use std::collections::HashMap;
-use tokio::sync::mpsc;
 
-#[derive(Debug, Serialize, DeepSizeOf, Clone)]
+#[derive(Debug, Serialize, DeepSizeOf, Clone, PartialEq)]
 pub struct Request {
     pub remote_ip: String,
     pub host: String,
@@ -15,6 +14,7 @@ pub struct Request {
     pub body: String,
 }
 
+#[derive(Debug)]
 struct Chunk {
     requests: Vec<Request>,
     size: usize,
@@ -52,19 +52,18 @@ impl Chunk {
     }
 }
 
+#[derive(Debug)]
 pub struct Store {
     relation_hosts_to_topics: HashMap<String, String>,
     chunks_by_topics: HashMap<String, Chunk>,
-    kafka_sender: mpsc::Sender<(String, Vec<Request>)>,
 
     max_len_chunk: usize,
     max_size_chunk: usize,
 }
 
 impl Store {
-    pub fn new(config: &AppConfig, kafka_sender: mpsc::Sender<(String, Vec<Request>)>) -> Store {
+    pub fn new(config: &ServiceConfig) -> Store {
         let relation_hosts_to_topics = config
-            .service
             .hosts_by_topics
             .iter()
             .flat_map(|(topic, hosts)| {
@@ -77,49 +76,119 @@ impl Store {
         Store {
             relation_hosts_to_topics,
             chunks_by_topics: HashMap::new(),
-            kafka_sender,
-            max_len_chunk: config.service.max_len_chunk,
-            max_size_chunk: config.service.max_size_chunk,
+            max_len_chunk: config.max_len_chunk,
+            max_size_chunk: config.max_size_chunk,
         }
     }
 
     // return true if chunk was sent
-    pub async fn push(&mut self, request: Request) -> bool {
-        let mut is_send = false;
+    pub fn push(&mut self, request: Request) -> Option<(String, Vec<Request>)> {
         match self.relation_hosts_to_topics.get(&request.host) {
             Some(topic) => match self.chunks_by_topics.get_mut(topic) {
                 Some(chunk) => {
                     if chunk.is_full(&request) {
-                        if let Err(e) = self
-                            .kafka_sender
-                            .send((topic.clone(), chunk.pop_all()))
-                            .await
-                        {
-                            error!("sender: {}", e)
-                        }
-                        is_send = true
+                        return Option::Some((topic.clone(), chunk.pop_all()));
                     }
                     chunk.push(request.clone());
                 }
                 None => {
                     let mut ch = Chunk::new(self.max_size_chunk, self.max_len_chunk);
                     ch.push(request.clone());
-                    self.chunks_by_topics.insert(request.host, ch);
+                    self.chunks_by_topics.insert(topic.clone(), ch);
                 }
             },
             None => {
                 warn!("host {} not supported", request.host)
             }
         };
-        is_send
+        Option::None
     }
 
-    pub async fn send(&mut self) {
-        for (topic, chunk) in &mut self.chunks_by_topics {
-            let reqs = chunk.pop_all();
-            if let Err(e) = self.kafka_sender.send((topic.to_string(), reqs)).await {
-                error!("sender: {}", e)
+    pub fn send(&mut self) -> Vec<(String, Vec<Request>)> {
+        return self
+            .chunks_by_topics
+            .iter_mut()
+            .map(|(topic, chunk)| (topic.clone(), chunk.pop_all()))
+            .collect();
+    }
+}
+
+#[cfg(test)]
+mod store_test {
+    use super::{Request, Store};
+    use crate::config::ServiceConfig;
+    use duration_string::DurationString;
+    use std::{collections::HashMap, time::Duration};
+
+    const HOST: &str = "host1";
+    const TOPIC: &str = "topic";
+
+    #[test]
+    fn nothing_return_if_store_is_empty() {
+        let mut store = Store::new(&ServiceConfig {
+            ..init_service_config()
+        });
+
+        assert!(store.push(Request { ..init_request() }).is_none())
+    }
+
+    #[test]
+    fn return_chunk_by_max_len_chunk() {
+        let mut store = Store::new(&ServiceConfig {
+            max_len_chunk: 2,
+            ..init_service_config()
+        });
+
+        assert!(store.push(Request { ..init_request() }).is_none());
+        assert!(store.push(Request { ..init_request() }).is_none());
+        match store.push(Request { ..init_request() }) {
+            Some((topic, requests)) => {
+                assert_eq!(topic, TOPIC.to_string());
+                assert_eq!(2, requests.len())
             }
+            None => assert!(false),
+        };
+    }
+
+    #[test]
+    fn return_chunk_by_max_size_chunk() {
+        let mut store = Store::new(&ServiceConfig {
+            max_len_chunk: 10240,
+            ..init_service_config()
+        });
+
+        assert!(store.push(Request { ..init_request() }).is_none());
+        assert!(store.push(Request { ..init_request() }).is_none());
+        match store.push(Request {
+            body: std::iter::repeat("X").take(1024).collect::<String>(),
+            ..init_request()
+        }) {
+            Some((topic, requests)) => {
+                assert_eq!(topic, TOPIC.to_string());
+                assert_eq!(2, requests.len())
+            }
+            None => assert!(false),
+        };
+    }
+
+    fn init_service_config() -> ServiceConfig {
+        ServiceConfig {
+            max_size_chunk: 2048,
+            max_len_chunk: 10,
+            max_collect_chunk_duration: DurationString::new(Duration::new(1, 0)),
+            hosts_by_topics: HashMap::from([(TOPIC.to_string(), Vec::from([HOST.to_string()]))]),
+            kafka_brokers: Vec::new(),
+        }
+    }
+
+    fn init_request() -> Request {
+        Request {
+            remote_ip: String::from("0.0.0.0"),
+            host: String::from(HOST.to_string()),
+            method: String::from("POST"),
+            path: String::from("/path"),
+            headers: HashMap::from([(String::from("heeader1"), String::from("header value"))]),
+            body: String::from("body"),
         }
     }
 }

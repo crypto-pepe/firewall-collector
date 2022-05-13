@@ -1,4 +1,4 @@
-use crate::config::AppConfig;
+use crate::config::{AppConfig, ServiceConfig};
 use crate::store::Request;
 use actix_web::{middleware::Logger, web, App, HttpRequest, HttpServer, Responder};
 use env_logger::Env;
@@ -43,7 +43,7 @@ async fn main() -> std::io::Result<()> {
     });
 
     let (request_sender, request_receiver) = mpsc::channel::<store::Request>(32);
-    let config_pocess = app_config.clone();
+    let config_pocess = app_config.service.clone();
     tokio::spawn(
         async move { service_process(request_receiver, kafka_sender, config_pocess).await },
     );
@@ -107,22 +107,30 @@ async fn index(req: HttpRequest, body: web::Bytes, state: web::Data<AppState>) -
 async fn service_process(
     mut reciver: mpsc::Receiver<store::Request>,
     kafka_sender: mpsc::Sender<(String, Vec<Request>)>,
-    config: AppConfig,
+    config: ServiceConfig,
 ) {
-    let mut store = store::Store::new(&config, kafka_sender);
+    let mut store = store::Store::new(&config);
 
-    let mut delay = tokio::time::interval(config.service.max_collect_chunk_duration.into());
+    let mut delay = tokio::time::interval(config.max_collect_chunk_duration.into());
 
     loop {
         tokio::select! {
             Some(msg) = reciver.recv() => {
-                if store.push(msg.clone()).await {
+                if let Some((topic, requests)) = store.push(msg.clone()) {
+                    if let Err(e) = kafka_sender.send((topic.clone(), requests)).await
+                    {
+                        error!("sender: {}", e)
+                    }
                     delay.reset();
                 };
             }
 
             _ = delay.tick() => {
-                store.send().await;
+                for (topic, requests) in store.send() {
+                    if let Err(e) = kafka_sender.send((topic.clone(), requests.clone())).await {
+                        error!("sender: {}", e)
+                    }
+                }
             }
         }
     }

@@ -1,9 +1,9 @@
 server:
   port: 8080
-  payload_max_size: 51200
+  payload_max_size: 5120
 service:
-  max_len_chunk: 2
-  max_size_chunk: 1024
+  max_len_chunk: 100
+  max_size_chunk: 1048576
   max_collect_chunk_duration: 3s
   hosts_by_topics:
     topic1:
