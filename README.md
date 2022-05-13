@@ -4,6 +4,8 @@ The service collects HTTP requests into chunks by hosts and sending them to kafk
 
 ## Configuration
 
+Service can be configured via `.yaml` config file.
+
 Example:
 
 ```yaml
@@ -29,3 +31,7 @@ service:
 - `max_size_chunk`: maximum size chunk in bytes
 - `max_collect_chunk_duration`: how long does accumulate chunk
 - `hosts_by_topics`: ratio hosts to Kafka topics
+
+### Configuration for docker container
+
+Mount the config file to the container and pass `CONFIG_PATH=${config file path}` environment variable.
