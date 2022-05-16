@@ -54,7 +54,7 @@ impl Chunk {
 
 #[derive(Debug)]
 pub struct Store {
-    relation_hosts_to_topics: HashMap<String, String>,
+    hosts_to_topics: HashMap<String, String>,
     chunks_by_topics: HashMap<String, Chunk>,
 
     max_len_chunk: usize,
@@ -63,27 +63,17 @@ pub struct Store {
 
 impl Store {
     pub fn new(config: &ServiceConfig) -> Store {
-        let relation_hosts_to_topics = config
-            .hosts_by_topics
-            .iter()
-            .flat_map(|(topic, hosts)| {
-                hosts
-                    .iter()
-                    .map(|host| (host.to_string(), topic.to_string()))
-            })
-            .collect();
-
         Store {
-            relation_hosts_to_topics,
+            hosts_to_topics: config.hosts_to_topics.clone(),
             chunks_by_topics: HashMap::new(),
             max_len_chunk: config.max_len_chunk,
             max_size_chunk: config.max_size_chunk,
         }
     }
 
-    // return true if chunk was sent
+    // return requests if chunk is full
     pub fn push(&mut self, request: Request) -> Option<(String, Vec<Request>)> {
-        match self.relation_hosts_to_topics.get(&request.host) {
+        match self.hosts_to_topics.get(&request.host) {
             Some(topic) => match self.chunks_by_topics.get_mut(topic) {
                 Some(chunk) => {
                     if chunk.is_full(&request) {
@@ -104,7 +94,8 @@ impl Store {
         Option::None
     }
 
-    pub fn send(&mut self) -> Vec<(String, Vec<Request>)> {
+    // return all requests from all chunks
+    pub fn pop_all(&mut self) -> Vec<(String, Vec<Request>)> {
         return self
             .chunks_by_topics
             .iter_mut()
@@ -121,7 +112,7 @@ mod store_test {
     use std::{collections::HashMap, time::Duration};
 
     const HOST: &str = "host1";
-    const TOPIC: &str = "topic";
+    const TOPIC: &str = "topic1";
 
     #[test]
     fn nothing_return_if_store_is_empty() {
@@ -171,12 +162,34 @@ mod store_test {
         };
     }
 
+    #[test]
+    fn pop_all() {
+        let mut store = Store::new(&ServiceConfig {
+            hosts_to_topics: HashMap::from([
+                (HOST.to_string(), TOPIC.to_string()),
+                ("host2".to_string(), "topic2".to_string()),
+            ]),
+            ..init_service_config()
+        });
+
+        assert!(store.push(Request { ..init_request() }).is_none());
+        assert!(store
+            .push(Request {
+                host: "host2".to_string(),
+                ..init_request()
+            })
+            .is_none());
+        assert!(store.push(Request { ..init_request() }).is_none());
+
+        assert_eq!(store.pop_all().len(), 2);
+    }
+
     fn init_service_config() -> ServiceConfig {
         ServiceConfig {
             max_size_chunk: 2048,
             max_len_chunk: 10,
             max_collect_chunk_duration: DurationString::new(Duration::new(1, 0)),
-            hosts_by_topics: HashMap::from([(TOPIC.to_string(), Vec::from([HOST.to_string()]))]),
+            hosts_to_topics: HashMap::from([(TOPIC.to_string(), HOST.to_string())]),
             kafka_brokers: Vec::new(),
         }
     }

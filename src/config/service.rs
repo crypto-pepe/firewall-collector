@@ -8,6 +8,6 @@ pub struct ServiceConfig {
     pub max_size_chunk: usize,
     pub max_len_chunk: usize,
     pub max_collect_chunk_duration: DurationString,
-    pub hosts_by_topics: HashMap<String, Vec<String>>,
+    pub hosts_to_topics: HashMap<String, String>,
     pub kafka_brokers: Vec<String>,
 }

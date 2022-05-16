@@ -21,12 +21,9 @@ service:
   max_len_chunk: 2
   max_size_chunk: 1024
   max_collect_chunk_duration: 3s
-  hosts_by_topics:
-    topic1:
-      - 'host1'
-      - 'host2'
-    topic2:
-      - 'host3'
+  hosts_to_topics:
+    host1: 'topic1'
+    host2: 'topic2'
   kafka_brokers:
     - 'localhost:9092'
 ```
@@ -35,8 +32,8 @@ service:
 - `max_len_chunk`: maximum number requests in the chunk
 - `max_size_chunk`: maximum size chunk in bytes
 - `max_collect_chunk_duration`: how long does accumulate chunk
-- `hosts_by_topics`: hosts to Kafka topics mapping
+- `hosts_to_topics`: hosts to Kafka topics mapping
 
 ## Requirements
 
-The topics from parameter `service.hosts_by_topics` of the config have to be created in the Kafka.
+The topics from parameter `service.hosts_to_topics` of the config have to be created in the Kafka.

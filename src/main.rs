@@ -126,7 +126,7 @@ async fn service_process(
             }
 
             _ = delay.tick() => {
-                for (topic, requests) in store.send() {
+                for (topic, requests) in store.pop_all() {
                     if let Err(e) = kafka_sender.send((topic.clone(), requests.clone())).await {
                         error!("sender: {}", e)
                     }
