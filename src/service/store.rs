@@ -1,18 +1,9 @@
 use crate::config::ServiceConfig;
 use deepsize::DeepSizeOf;
 use pepe_log::warn;
-use serde::Serialize;
 use std::collections::HashMap;
 
-#[derive(Debug, Serialize, DeepSizeOf, Clone, PartialEq)]
-pub struct Request {
-    pub remote_ip: String,
-    pub host: String,
-    pub method: String,
-    pub path: String,
-    pub headers: HashMap<String, String>,
-    pub body: String,
-}
+use super::Request;
 
 #[derive(Debug)]
 struct Chunk {
@@ -33,6 +24,7 @@ impl Chunk {
     }
 
     fn is_full(&self, request: &Request) -> bool {
+        println!("is full");
         let rs = request.deep_size_of();
         if self.size + rs > self.max_chunk_size || self.requests.len() >= self.max_len_chunk {
             return true;
@@ -77,7 +69,9 @@ impl Store {
             Some(topic) => match self.chunks_by_topics.get_mut(topic) {
                 Some(chunk) => {
                     if chunk.is_full(&request) {
-                        return Option::Some((topic.clone(), chunk.pop_all()));
+                        let reqs = chunk.pop_all();
+                        chunk.push(request.clone());
+                        return Option::Some((topic.clone(), reqs));
                     }
                     chunk.push(request.clone());
                 }
@@ -139,6 +133,9 @@ mod store_test {
             }
             None => assert!(false),
         };
+
+        // check last request
+        assert_eq!(store.pop_all()[0].1.len(), 1);
     }
 
     #[test]
@@ -189,7 +186,7 @@ mod store_test {
             max_size_chunk: 2048,
             max_len_chunk: 10,
             max_collect_chunk_duration: DurationString::new(Duration::new(1, 0)),
-            hosts_to_topics: HashMap::from([(TOPIC.to_string(), HOST.to_string())]),
+            hosts_to_topics: HashMap::from([(HOST.to_string(), TOPIC.to_string())]),
             kafka_brokers: Vec::new(),
         }
     }

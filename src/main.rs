@@ -1,23 +1,21 @@
-use crate::config::{AppConfig, ServiceConfig};
-use crate::store::Request;
 use actix_web::{middleware::Logger, web, App, HttpRequest, HttpServer, Responder};
 use env_logger::Env;
-use kafka::{
-    client::RequiredAcks, error::Error as KafkaError, producer::Producer, producer::Record,
-};
 use pepe_config::load;
 use pepe_log::{error, info, warn};
-use std::time::Duration;
 use tokio::sync::mpsc;
 
+use crate::config::AppConfig;
+use crate::service::Request;
+
 mod config;
-mod store;
+mod kafka;
+mod service;
 
 const DEFAULT_CONFIG: &str = include_str!("../config.yaml");
 
 struct AppState {
     config: AppConfig,
-    sender: mpsc::Sender<store::Request>,
+    sender: mpsc::Sender<service::Request>,
 }
 
 #[tokio::main]
@@ -34,18 +32,18 @@ async fn main() -> std::io::Result<()> {
 
     let port = app_config.server.port;
 
-    let (kafka_sender, kafka_receiver) = mpsc::channel::<(String, Vec<store::Request>)>(32);
+    let (kafka_sender, kafka_receiver) = mpsc::channel::<(String, Vec<service::Request>)>(32);
     let config_process = app_config.clone();
     tokio::spawn(async move {
-        if let Err(e) = kafka_process(kafka_receiver, config_process).await {
+        if let Err(e) = kafka::producer(kafka_receiver, config_process).await {
             error!("kafka producer: {}", e)
         }
     });
 
-    let (request_sender, request_receiver) = mpsc::channel::<store::Request>(32);
+    let (request_sender, request_receiver) = mpsc::channel::<service::Request>(32);
     let config_pocess = app_config.service.clone();
     tokio::spawn(
-        async move { service_process(request_receiver, kafka_sender, config_pocess).await },
+        async move { service::process(request_receiver, kafka_sender, config_pocess).await },
     );
 
     let data = web::Data::new(AppState {
@@ -102,55 +100,4 @@ async fn index(req: HttpRequest, body: web::Bytes, state: web::Data<AppState>) -
     };
 
     "OK"
-}
-
-async fn service_process(
-    mut reciver: mpsc::Receiver<store::Request>,
-    kafka_sender: mpsc::Sender<(String, Vec<Request>)>,
-    config: ServiceConfig,
-) {
-    let mut store = store::Store::new(&config);
-
-    let mut delay = tokio::time::interval(config.max_collect_chunk_duration.into());
-
-    loop {
-        tokio::select! {
-            Some(msg) = reciver.recv() => {
-                if let Some((topic, requests)) = store.push(msg.clone()) {
-                    if let Err(e) = kafka_sender.send((topic.clone(), requests)).await
-                    {
-                        error!("sender: {}", e)
-                    }
-                    delay.reset();
-                };
-            }
-
-            _ = delay.tick() => {
-                for (topic, requests) in store.pop_all() {
-                    if let Err(e) = kafka_sender.send((topic.clone(), requests.clone())).await {
-                        error!("sender: {}", e)
-                    }
-                }
-            }
-        }
-    }
-}
-
-async fn kafka_process(
-    mut reciver: mpsc::Receiver<(String, Vec<Request>)>,
-    config: AppConfig,
-) -> Result<(), KafkaError> {
-    let mut producer = Producer::from_hosts(config.service.kafka_brokers)
-        .with_ack_timeout(Duration::from_secs(1))
-        .with_required_acks(RequiredAcks::One)
-        .create()?;
-
-    while let Some((topic, requests)) = reciver.recv().await {
-        let s = serde_json::to_string(&requests).unwrap();
-        if let Err(e) = producer.send(&Record::from_value(topic.as_str(), s)) {
-            error!("kafka error: {}", e)
-        }
-    }
-
-    Ok(())
 }
