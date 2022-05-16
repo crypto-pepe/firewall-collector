@@ -10,6 +10,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1.0.81" }
 thiserror = "1.0.30"
 deepsize = "0.2.0"
+futures = { version="0.3.21"  }
 
 # log
 slog = { version = "2.7.0", features = ["nested-values"] }

@@ -1,3 +1,4 @@
+use futures::future::try_join_all;
 use pepe_log::error;
 use tokio::sync::mpsc;
 
@@ -29,15 +30,14 @@ pub async fn process(
             }
 
             _ = delay.tick() => {
-                // store.pop_all().iter_mut().for_each( |(topic, requests)|  {
-                //         if let Err(e) = kafka_sender.send((topic.clone(), requests.clone())).await {
-                //             error!("sender: {}", e)
-                //         }
-                // });
-                for (topic, requests) in store.pop_all() {
-                    if let Err(e) = kafka_sender.send((topic.clone(), requests.clone())).await {
-                        error!("sender: {}", e)
-                    }
+                let fs = store
+                    .pop_all()
+                    .iter_mut()
+                    .map(|(topic, requests)| kafka_sender.send((topic.clone(), requests.clone())))
+                    .collect::<Vec<_>>();
+
+                if let Err(e) = try_join_all(fs).await {
+                    error!("sender: {}", e)
                 }
             }
         }
