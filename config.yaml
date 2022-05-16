@@ -2,12 +2,11 @@ server:
   port: 8080
   payload_max_size: 5120
 service:
-  max_len_chunk: 2
-  max_size_chunk: 1024
+  max_len_chunk: 100
+  max_size_chunk: 1048576
   max_collect_chunk_duration: 3s
-  hosts_by_topics:
-    topic1:
-      - "host1"
-      - "host2"
-    topic2:
-      - "host3"
+  hosts_to_topics:
+    host1: 'topic1'
+    host2: 'topic2'
+  kafka_brokers:
+    - "localhost:9092"
