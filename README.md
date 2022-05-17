@@ -26,6 +26,11 @@ service:
     host2: 'topic2'
   kafka_brokers:
     - 'localhost:9092'
+  sensitive_headers:
+    - 'header1'
+  sensitive_json_keys:
+    - 'key1'
+
 ```
 
 - `payload_max_size`: maxumum size HTTP body in bytes
@@ -33,6 +38,8 @@ service:
 - `max_size_chunk`: maximum size chunk in bytes
 - `max_collect_chunk_duration`: how long does accumulate chunk
 - `hosts_to_topics`: hosts to Kafka topics mapping
+- `sensitive_headers`: headers that will be excluded from requests
+- `sensitive_json_keys`: json keys that will be excluded from request body. If body isn't json, body exclueded completely.
 
 ## Requirements
 
