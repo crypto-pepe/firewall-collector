@@ -3,8 +3,8 @@ use std::time::Duration;
 use kafka::{
     client::RequiredAcks, error::Error as KafkaError, producer::Producer, producer::Record,
 };
-use pepe_log::error;
 use tokio::sync::mpsc;
+use tracing::error;
 
 use crate::{config::AppConfig, service::Request};
 
