@@ -2,6 +2,10 @@
 
 The service collects HTTP requests into chunks by hosts and sending them to kafka topics.
 
+## Requirements
+
+The topics from parameter `service.hosts_to_topics` of the config have to be created in the Kafka.
+
 ## Configuration
 
 ### Environment variables
@@ -27,6 +31,13 @@ If CONFIG_PATH is not stated then ./config.yaml will be used
 | service.sensitive_headers          | No       | Headers that will be excluded from requests.                                                     |
 | service.sensitive_json_keys        | No       | JSON keys that will be excluded from request body.If body isn't json, body exclueded completely. |
 
-## Requirements
+---
 
-The topics from parameter `service.hosts_to_topics` of the config have to be created in the Kafka.
+Each of the configuration parameter can be overridden via the environment variable. Nested values overriding are supported via the '.' separator. 
+
+Example:
+
+| Parameter name | Env. variable |
+|----------------|---------------|
+| some_field     | SOME_FIELD    |
+| server.port    | SERVER.PORT   |
