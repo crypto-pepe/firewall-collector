@@ -1,4 +1,5 @@
 use ::tracing::{error, info};
+use anyhow::Ok;
 use tokio::sync::mpsc;
 
 use crate::metrics::init_api_metrics;
@@ -40,9 +41,7 @@ async fn main() -> anyhow::Result<()> {
         sender: request_sender,
     };
 
-    let s = init_server(app_config.server, init_api_metrics(), data)?;
-    match s.await {
-        Err(e) => Err(anyhow::anyhow!("{}", e)),
-        _ => anyhow::Ok(()),
-    }
+    init_server(app_config.server, init_api_metrics(), data)?.await?;
+
+    Ok(())
 }
