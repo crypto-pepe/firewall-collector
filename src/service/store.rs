@@ -3,7 +3,7 @@ use deepsize::DeepSizeOf;
 use pepe_log::warn;
 use std::collections::HashMap;
 
-use super::Request;
+use super::{cleaner, Request};
 
 #[derive(Debug)]
 struct Chunk {
@@ -24,7 +24,6 @@ impl Chunk {
     }
 
     fn is_full(&self, request: &Request) -> bool {
-        println!("is full");
         let rs = request.deep_size_of();
         if self.size + rs > self.max_chunk_size || self.requests.len() >= self.max_len_chunk {
             return true;
@@ -49,6 +48,9 @@ pub struct Store {
     hosts_to_topics: HashMap<String, String>,
     chunks_by_topics: HashMap<String, Chunk>,
 
+    sensitive_headers: Vec<String>,
+    sensitive_json_keys: Vec<String>,
+
     max_len_chunk: usize,
     max_size_chunk: usize,
 }
@@ -58,6 +60,8 @@ impl Store {
         Store {
             hosts_to_topics: config.hosts_to_topics.clone(),
             chunks_by_topics: HashMap::new(),
+            sensitive_headers: config.sensitive_headers.clone(),
+            sensitive_json_keys: config.sensitive_json_keys.clone(),
             max_len_chunk: config.max_len_chunk,
             max_size_chunk: config.max_size_chunk,
         }
@@ -65,6 +69,8 @@ impl Store {
 
     // return requests if chunk is full
     pub fn push(&mut self, request: Request) -> Option<(String, Vec<Request>)> {
+        let request = self.clean(request);
+
         match self.hosts_to_topics.get(&request.host) {
             Some(topic) => match self.chunks_by_topics.get_mut(topic) {
                 Some(chunk) => {
@@ -95,6 +101,14 @@ impl Store {
             .iter_mut()
             .map(|(topic, chunk)| (topic.clone(), chunk.pop_all()))
             .collect();
+    }
+
+    fn clean(&self, request: Request) -> Request {
+        Request {
+            headers: cleaner::headers(request.headers, self.sensitive_headers.clone()),
+            body: cleaner::body(request.body, self.sensitive_json_keys.clone()),
+            ..request
+        }
     }
 }
 
@@ -185,6 +199,8 @@ mod store_test {
         ServiceConfig {
             max_size_chunk: 2048,
             max_len_chunk: 10,
+            sensitive_headers: Vec::from(["some_header".to_string()]),
+            sensitive_json_keys: Vec::from(["some_json_key".to_string()]),
             max_collect_chunk_duration: DurationString::new(Duration::new(1, 0)),
             hosts_to_topics: HashMap::from([(HOST.to_string(), TOPIC.to_string())]),
             kafka_brokers: Vec::new(),

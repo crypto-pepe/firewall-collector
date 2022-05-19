@@ -10,3 +10,9 @@ service:
     host2: 'topic2'
   kafka_brokers:
     - "localhost:9092"
+  sensitive_headers:
+    - 'header1'
+    - 'header2'
+  sensitive_json_keys:
+    - 'key1'
+    - 'key2'
