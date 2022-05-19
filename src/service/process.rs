@@ -1,6 +1,6 @@
 use futures::future::try_join_all;
-use pepe_log::error;
 use tokio::sync::mpsc;
+use tracing::error;
 
 use crate::config::ServiceConfig;
 

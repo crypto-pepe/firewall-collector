@@ -1,7 +1,7 @@
 use crate::config::ServiceConfig;
 use deepsize::DeepSizeOf;
-use pepe_log::warn;
 use std::collections::HashMap;
+use tracing::warn;
 
 use super::{cleaner, Request};
 
