@@ -7,39 +7,25 @@ The service collects HTTP requests into chunks by hosts and sending them to kafk
 ### Environment variables
 
 | Name        | Required | Note                                                                     |
-| ----------- | -------- | ------------------------------------------------------------------------ |
-| RUST_LOG    | NO       | Log level. https://docs.rs/env_logger/0.9.0/env_logger/#enabling-logging |
+|-------------|----------|--------------------------------------------------------------------------|
+| RUST_LOG    | No       | Log level. https://docs.rs/env_logger/0.9.0/env_logger/#enabling-logging |
 | CONFIG_PATH | No       | Path to the `yaml` formatted config file                                 |
 
-YAML formatted config file example:
+### Config variables
 
-```yaml
-server:
-  port: 8080
-  payload_max_size: 51200
-service:
-  max_len_chunk: 2
-  max_size_chunk: 1024
-  max_collect_chunk_duration: 3s
-  hosts_to_topics:
-    host1: 'topic1'
-    host2: 'topic2'
-  kafka_brokers:
-    - 'localhost:9092'
-  sensitive_headers:
-    - 'header1'
-  sensitive_json_keys:
-    - 'key1'
+If CONFIG_PATH is not stated then ./config.yaml will be used
 
-```
-
-- `payload_max_size`: maxumum size HTTP body in bytes
-- `max_len_chunk`: maximum number requests in the chunk
-- `max_size_chunk`: maximum size chunk in bytes
-- `max_collect_chunk_duration`: how long does accumulate chunk
-- `hosts_to_topics`: hosts to Kafka topics mapping
-- `sensitive_headers`: headers that will be excluded from requests
-- `sensitive_json_keys`: json keys that will be excluded from request body. If body isn't json, body exclueded completely.
+| Name                               | Required | Note                                                                                             |
+|------------------------------------|----------|--------------------------------------------------------------------------------------------------|
+| server.host                        | No       | Socket host to bind. Default `0.0.0.0`.                                                          |
+| server.port                        | No       | Socket port to bind. Default `8080`.                                                             |
+| server.payload_max_size            | Yes      | Maxumum size HTTP body in bytes.                                                                 |
+| service.max_len_chunk              | Yes      | Maximum number requests in the chunk.                                                            |
+| service.max_size_chunk             | Yes      | Maximum size chunk in bytes.                                                                     |
+| service.max_collect_chunk_duration | Yes      | How long does accumulate chunk.                                                                  |
+| service.hosts_to_topics            | Yes      | Hosts to Kafka topics mapping.                                                                   |
+| service.sensitive_headers          | No       | Headers that will be excluded from requests.                                                     |
+| service.sensitive_json_keys        | No       | JSON keys that will be excluded from request body.If body isn't json, body exclueded completely. |
 
 ## Requirements
 

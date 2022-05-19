@@ -27,8 +27,10 @@ pub fn init_server(
             .app_data(data.clone())
             .default_service(web::to(default_handler))
     })
-    .bind((config.host, config.port))
-    {
+    .bind((
+        config.host.unwrap_or("127.0.0.1".to_string()),
+        config.port.unwrap_or(8080),
+    )) {
         Ok(s) => Ok(s.run()),
         Err(e) => Err(anyhow::anyhow!("{}", e)),
     }
