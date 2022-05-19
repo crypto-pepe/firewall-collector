@@ -1,8 +1,7 @@
-use std::io;
-
-use actix_web::dev::Server;
+use actix_web::dev;
 use actix_web::{web, App, HttpRequest, HttpServer, Responder};
 use actix_web_prom::PrometheusMetrics;
+use anyhow::Result;
 use tokio::sync::mpsc;
 use tracing::{error, warn};
 
@@ -19,8 +18,8 @@ pub fn init_server(
     config: config::ServerConfig,
     metrics: PrometheusMetrics,
     data: AppState,
-) -> Result<Server, io::Error> {
-    Ok(HttpServer::new(move || {
+) -> Result<dev::Server> {
+    match HttpServer::new(move || {
         App::new()
             .wrap(actix_web::middleware::Logger::default())
             .wrap(tracing_actix_web::TracingLogger::default())
@@ -28,8 +27,11 @@ pub fn init_server(
             .app_data(data.clone())
             .default_service(web::to(default_handler))
     })
-    .bind((config.host, config.port))?
-    .run())
+    .bind((config.host, config.port))
+    {
+        Ok(s) => Ok(s.run()),
+        Err(e) => Err(anyhow::anyhow!("{}", e)),
+    }
 }
 
 async fn default_handler(

@@ -13,7 +13,7 @@ mod service;
 mod tracing;
 
 #[tokio::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> anyhow::Result<()> {
     init_tracing();
     info!("start application");
 
@@ -40,5 +40,9 @@ async fn main() -> std::io::Result<()> {
         sender: request_sender,
     };
 
-    init_server(app_config.server, init_api_metrics(), data)?.await
+    let s = init_server(app_config.server, init_api_metrics(), data)?;
+    match s.await {
+        Err(e) => Err(anyhow::anyhow!("{}", e)),
+        _ => anyhow::Ok(()),
+    }
 }
