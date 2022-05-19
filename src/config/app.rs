@@ -1,7 +1,7 @@
 use super::server::ServerConfig;
 use super::service::ServiceConfig;
 use anyhow::Result;
-use pepe_config::load;
+use pepe_config::{load, FileFormat};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -14,6 +14,6 @@ const DEFAULT_CONFIG: &str = include_str!("../../config.yaml");
 
 impl AppConfig {
     pub fn load() -> Result<AppConfig> {
-        load(DEFAULT_CONFIG, ::config::FileFormat::Yaml).map_err(|e| e.into())
+        load(DEFAULT_CONFIG, FileFormat::Yaml).map_err(|e| e.into())
     }
 }
