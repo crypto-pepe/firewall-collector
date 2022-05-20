@@ -19,6 +19,7 @@ pub fn init_server(
     metrics: PrometheusMetrics,
     data: AppState,
 ) -> Result<dev::Server> {
+    let data = web::Data::new(data);
     match HttpServer::new(move || {
         App::new()
             .wrap(actix_web::middleware::Logger::default())

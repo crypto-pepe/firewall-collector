@@ -33,6 +33,7 @@ pub async fn process(
                 let fs = store
                     .pop_all()
                     .iter_mut()
+                    .filter(|(_, requests)| requests.len() != 0)
                     .map(|(topic, requests)| kafka_sender.send((topic.clone(), requests.clone())))
                     .collect::<Vec<_>>();
 
