@@ -27,3 +27,4 @@ jobs:
         file: ./Dockerfile
         push: true
         tags: ${{ secrets.DOCKER_USER }}/firewall-collector:latest , ${{ secrets.DOCKER_USER }}/firewall-collector:${{ env.BRANCH }}
+
