@@ -13,8 +13,11 @@ pub async fn producer(
     mut reciver: mpsc::Receiver<(String, Vec<Request>)>,
     config: AppConfig,
 ) -> Result<(), KafkaError> {
-    let mut producer = Producer::from_hosts(config.service.kafka_brokers)
-        .with_ack_timeout(Duration::from_secs(1))
+    let mut producer = Producer::from_hosts(config.kafka.brokers)
+        .with_ack_timeout(match config.kafka.ack_timeout {
+            Some(d) => d.into(),
+            None => Duration::from_secs(1),
+        })
         .with_required_acks(RequiredAcks::One)
         .create()?;
 

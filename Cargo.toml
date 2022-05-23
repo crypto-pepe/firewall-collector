@@ -28,8 +28,6 @@ tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 actix-web = "4"
 actix-web-prom = "0.6.0"
 
-duration-string = { version = "0.0.6", features = ["serde"] }
-
 kafka = "0.9"
 
-pepe-config = "0.0.3"
+pepe-config = "0.0.5"
