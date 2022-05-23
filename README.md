@@ -31,7 +31,7 @@ If CONFIG_PATH is not stated then ./config.yaml will be used
 | service.sensitive_headers          | No       | Headers that will be excluded from requests.                                                     |
 | service.sensitive_json_keys        | No       | JSON keys that will be excluded from request body.If body isn't json, body exclueded completely. |
 | kafka.brokers                      | Yes      | Kafka brokers hosts.                                                                             |
-| kafka.ask_timeout                  | No       | Time the kafka brokers await the receipt of acknowledgements. Default 1 sec.                     |
+| kafka.ack_timeout                  | No       | Time the kafka brokers await the receipt of acknowledgements. Default 1 sec.                     |
 
 ---
 

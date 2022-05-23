@@ -18,5 +18,5 @@ service:
 kafka:
   brokers:
     - "localhost:9092"
-  ask_timeout: 1
+  ack_timeout: 1s
 
