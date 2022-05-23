@@ -116,7 +116,7 @@ impl Store {
 mod store_test {
     use super::{Request, Store};
     use crate::config::ServiceConfig;
-    use duration_string::DurationString;
+    use pepe_config::DurationString;
     use std::{collections::HashMap, time::Duration};
 
     const HOST: &str = "host1";
@@ -203,7 +203,6 @@ mod store_test {
             sensitive_json_keys: Vec::from(["some_json_key".to_string()]),
             max_collect_chunk_duration: DurationString::new(Duration::new(1, 0)),
             hosts_to_topics: HashMap::from([(HOST.to_string(), TOPIC.to_string())]),
-            kafka_brokers: Vec::new(),
         }
     }
 

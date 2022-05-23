@@ -380,7 +380,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "deepsize",
- "duration-string",
  "futures",
  "kafka",
  "pepe-config",
@@ -1137,11 +1136,12 @@ checksum = "8835116a5c179084a830efb3adc117ab007512b535bc1a21c991d3b32a6b44dd"
 
 [[package]]
 name = "pepe-config"
-version = "0.0.3"
+version = "0.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f52dd99337856e82a90cc4acccedce82dcf0f4dc7896403274c5c415ee00d90a"
+checksum = "9619107255c4122746535b197d6bfb741988a2fd5d337cd6e9e9c87db115f364"
 dependencies = [
  "config",
+ "duration-string",
  "serde",
 ]
 

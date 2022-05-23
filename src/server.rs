@@ -45,7 +45,7 @@ async fn default_handler(
         return "";
     }
 
-    let r = Request {
+    let req = Request {
         remote_ip: match req.peer_addr() {
             Some(n) => n.ip().to_string(),
             None => String::new(),
@@ -72,7 +72,7 @@ async fn default_handler(
         body: String::from_utf8(body.to_vec()).unwrap(),
     };
 
-    if let Err(e) = state.sender.send(r).await {
+    if let Err(e) = state.sender.send(req).await {
         error!("sender: {}", e)
     };
 

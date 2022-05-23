@@ -1,4 +1,4 @@
-use duration_string::DurationString;
+use pepe_config::DurationString;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -8,7 +8,6 @@ pub struct ServiceConfig {
     pub max_len_chunk: usize,
     pub max_collect_chunk_duration: DurationString,
     pub hosts_to_topics: HashMap<String, String>,
-    pub kafka_brokers: Vec<String>,
     pub sensitive_headers: Vec<String>,
     pub sensitive_json_keys: Vec<String>,
 }

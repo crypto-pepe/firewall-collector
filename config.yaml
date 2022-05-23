@@ -9,11 +9,14 @@ service:
   hosts_to_topics:
     host1: 'topic1'
     host2: 'topic2'
-  kafka_brokers:
-    - "localhost:9092"
   sensitive_headers:
     - 'header1'
     - 'header2'
   sensitive_json_keys:
     - 'key1'
     - 'key2'
+kafka:
+  brokers:
+    - "localhost:9092"
+  ack_timeout: 1s
+
