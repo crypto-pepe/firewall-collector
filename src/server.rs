@@ -1,17 +1,17 @@
-use actix_web::dev;
-use actix_web::{web, App, HttpRequest, HttpServer, Responder};
+use actix_web::{dev, web, App, HttpRequest, HttpResponse, HttpServer};
 use actix_web_prom::PrometheusMetrics;
 use anyhow::Result;
+use core::result::Result::Ok;
+use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::{error, warn};
 
 use crate::config::{self, AppConfig};
 use crate::service::{self, Request};
 
-#[derive(Clone)]
 pub struct AppState {
     pub config: AppConfig,
-    pub sender: mpsc::Sender<service::Request>,
+    pub sender: mpsc::Sender<(String, Vec<service::Request>)>,
+    pub store: Arc<service::Store>,
 }
 
 pub fn init_server(
@@ -39,10 +39,9 @@ async fn default_handler(
     req: HttpRequest,
     body: web::Bytes,
     state: web::Data<AppState>,
-) -> impl Responder {
+) -> HttpResponse {
     if body.len() > state.config.server.payload_max_size {
-        warn!("request body is too large");
-        return "";
+        return HttpResponse::NoContent().body("request body is too large");
     }
 
     let req = Request {
@@ -72,9 +71,17 @@ async fn default_handler(
         body: String::from_utf8(body.to_vec()).unwrap(),
     };
 
-    if let Err(e) = state.sender.send(req).await {
-        error!("sender: {}", e)
-    };
-
-    "OK"
+    match state.store.push(req) {
+        Ok(s) => {
+            if let Some((topic, requests)) = s {
+                if let Err(e) = state.sender.send((topic.clone(), requests)).await {
+                    HttpResponse::InternalServerError().body(e.to_string());
+                }
+            }
+            HttpResponse::Created().body("")
+        }
+        Err(e) => HttpResponse::NoContent()
+            .reason(Box::leak(e.to_string().into_boxed_str()))
+            .body(""),
+    }
 }
