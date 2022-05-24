@@ -1,0 +1,79 @@
+use actix_web::{dev, web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web_prom::PrometheusMetrics;
+use core::result::Result::Ok;
+use std::sync::Arc;
+use tokio::sync::mpsc;
+use tracing::{error, warn};
+
+use crate::config::{self, AppConfig};
+use crate::service::{self, Request};
+
+use super::error::Error;
+
+pub struct AppState {
+    pub config: AppConfig,
+    pub sender: mpsc::Sender<(String, Vec<service::Request>)>,
+    pub store: Arc<service::Store>,
+}
+
+pub fn init_server(
+    config: config::ServerConfig,
+    metrics: PrometheusMetrics,
+    data: AppState,
+) -> anyhow::Result<dev::Server> {
+    let data = web::Data::new(data);
+    match HttpServer::new(move || {
+        App::new()
+            .wrap(actix_web::middleware::Logger::default())
+            .wrap(tracing_actix_web::TracingLogger::default())
+            .wrap(metrics.clone())
+            .app_data(data.clone())
+            .default_service(web::to(default_handler))
+    })
+    .bind((config.host, config.port))
+    {
+        Ok(s) => Ok(s.run()),
+        Err(e) => Err(anyhow::anyhow!("{}", e)),
+    }
+}
+
+async fn default_handler(
+    req: HttpRequest,
+    body: web::Bytes,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, Error> {
+    if body.len() > state.config.server.payload_max_size {
+        warn!("request body too large");
+        return Ok(HttpResponse::NoContent().body(""));
+    }
+
+    let req = match Request::new(req, body) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("{}", e);
+            return Err(Error::InternalError);
+        }
+    };
+
+    match state.store.push(req) {
+        Ok(s) => {
+            if let Some((topic, requests)) = s {
+                if let Err(e) = state.sender.send((topic.clone(), requests)).await {
+                    error!("{}", e);
+                    return Err(Error::InternalError);
+                }
+            }
+            Ok(HttpResponse::Created().body(""))
+        }
+        Err(e) => match e {
+            service::Error::InternalError(e) => {
+                error!("{}", e);
+                Err(Error::InternalError)
+            }
+            service::Error::Reject(e) => {
+                warn!("{}", e);
+                Ok(HttpResponse::NoContent().body(""))
+            }
+        },
+    }
+}

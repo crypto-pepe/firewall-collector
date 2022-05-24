@@ -1,7 +1,7 @@
 use crate::config::ServiceConfig;
 use deepsize::DeepSizeOf;
-use std::collections::HashMap;
-use tracing::warn;
+use std::{collections::HashMap, sync::Mutex};
+use thiserror::Error;
 
 use super::{cleaner, Request};
 
@@ -43,10 +43,19 @@ impl Chunk {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("internal error: {0}")]
+    InternalError(String),
+    #[error("reject: '{0}'")]
+    Reject(String),
+}
+
 #[derive(Debug)]
 pub struct Store {
+    chunks_by_topics: Mutex<HashMap<String, Chunk>>,
+
     hosts_to_topics: HashMap<String, String>,
-    chunks_by_topics: HashMap<String, Chunk>,
 
     sensitive_headers: Vec<String>,
     sensitive_json_keys: Vec<String>,
@@ -59,7 +68,7 @@ impl Store {
     pub fn new(config: &ServiceConfig) -> Store {
         Store {
             hosts_to_topics: config.hosts_to_topics.clone(),
-            chunks_by_topics: HashMap::new(),
+            chunks_by_topics: Mutex::new(HashMap::new()),
             sensitive_headers: config.sensitive_headers.clone(),
             sensitive_json_keys: config.sensitive_json_keys.clone(),
             max_len_chunk: config.max_len_chunk,
@@ -68,39 +77,59 @@ impl Store {
     }
 
     // return requests if chunk is full
-    pub fn push(&mut self, request: Request) -> Option<(String, Vec<Request>)> {
+    pub fn push(&self, request: Request) -> Result<Option<(String, Vec<Request>)>, Error> {
         let request = self.clean(request);
 
-        match self.hosts_to_topics.get(&request.host) {
-            Some(topic) => match self.chunks_by_topics.get_mut(topic) {
-                Some(chunk) => {
-                    if chunk.is_full(&request) {
-                        let reqs = chunk.pop_all();
-                        chunk.push(request.clone());
-                        return Option::Some((topic.clone(), reqs));
-                    }
+        let topic = match self.hosts_to_topics.get(&request.host) {
+            Some(t) => t,
+            None => {
+                return Err(Error::Reject(format!(
+                    "host {} not supported",
+                    request.host
+                )));
+            }
+        };
+
+        let mut chunks_by_topics = match self.chunks_by_topics.lock() {
+            Ok(c) => c,
+            Err(e) => {
+                return Err(Error::InternalError(format!(
+                    "chunks_by_topics.lock(): {}",
+                    e
+                )));
+            }
+        };
+
+        match chunks_by_topics.get_mut(topic) {
+            Some(chunk) => match chunk.is_full(&request) {
+                true => {
+                    let reqs = chunk.pop_all();
                     chunk.push(request.clone());
+                    Ok(Option::Some((topic.clone(), reqs)))
                 }
-                None => {
-                    let mut ch = Chunk::new(self.max_size_chunk, self.max_len_chunk);
-                    ch.push(request.clone());
-                    self.chunks_by_topics.insert(topic.clone(), ch);
+                false => {
+                    chunk.push(request.clone());
+                    Ok(Option::None)
                 }
             },
             None => {
-                warn!("host {} not supported", request.host)
+                let mut ch = Chunk::new(self.max_size_chunk, self.max_len_chunk);
+                ch.push(request.clone());
+                chunks_by_topics.insert(topic.clone(), ch);
+                Ok(Option::None)
             }
-        };
-        Option::None
+        }
     }
 
     // return all requests from all chunks
-    pub fn pop_all(&mut self) -> Vec<(String, Vec<Request>)> {
-        return self
-            .chunks_by_topics
-            .iter_mut()
-            .map(|(topic, chunk)| (topic.clone(), chunk.pop_all()))
-            .collect();
+    pub fn pop_all(&self) -> Result<Vec<(String, Vec<Request>)>, Error> {
+        match self.chunks_by_topics.lock() {
+            Ok(mut c) => Ok(c
+                .iter_mut()
+                .map(|(topic, chunk)| (topic.clone(), chunk.pop_all()))
+                .collect()),
+            Err(e) => Err(Error::InternalError(e.to_string())),
+        }
     }
 
     fn clean(&self, request: Request) -> Request {
@@ -124,23 +153,23 @@ mod store_test {
 
     #[test]
     fn nothing_return_if_store_is_empty() {
-        let mut store = Store::new(&ServiceConfig {
+        let store = Store::new(&ServiceConfig {
             ..init_service_config()
         });
 
-        assert!(store.push(Request { ..init_request() }).is_none())
+        assert!(store.push(Request { ..init_request() }).unwrap().is_none())
     }
 
     #[test]
     fn return_chunk_by_max_len_chunk() {
-        let mut store = Store::new(&ServiceConfig {
+        let store = Store::new(&ServiceConfig {
             max_len_chunk: 2,
             ..init_service_config()
         });
 
-        assert!(store.push(Request { ..init_request() }).is_none());
-        assert!(store.push(Request { ..init_request() }).is_none());
-        match store.push(Request { ..init_request() }) {
+        assert!(store.push(Request { ..init_request() }).unwrap().is_none());
+        assert!(store.push(Request { ..init_request() }).unwrap().is_none());
+        match store.push(Request { ..init_request() }).unwrap() {
             Some((topic, requests)) => {
                 assert_eq!(topic, TOPIC.to_string());
                 assert_eq!(2, requests.len())
@@ -149,22 +178,25 @@ mod store_test {
         };
 
         // check last request
-        assert_eq!(store.pop_all()[0].1.len(), 1);
+        assert_eq!(store.pop_all().unwrap()[0].1.len(), 1);
     }
 
     #[test]
     fn return_chunk_by_max_size_chunk() {
-        let mut store = Store::new(&ServiceConfig {
+        let store = Store::new(&ServiceConfig {
             max_len_chunk: 10240,
             ..init_service_config()
         });
 
-        assert!(store.push(Request { ..init_request() }).is_none());
-        assert!(store.push(Request { ..init_request() }).is_none());
-        match store.push(Request {
-            body: std::iter::repeat("X").take(1024).collect::<String>(),
-            ..init_request()
-        }) {
+        assert!(store.push(Request { ..init_request() }).unwrap().is_none());
+        assert!(store.push(Request { ..init_request() }).unwrap().is_none());
+        match store
+            .push(Request {
+                body: std::iter::repeat("X").take(1024).collect::<String>(),
+                ..init_request()
+            })
+            .unwrap()
+        {
             Some((topic, requests)) => {
                 assert_eq!(topic, TOPIC.to_string());
                 assert_eq!(2, requests.len())
@@ -175,7 +207,7 @@ mod store_test {
 
     #[test]
     fn pop_all() {
-        let mut store = Store::new(&ServiceConfig {
+        let store = Store::new(&ServiceConfig {
             hosts_to_topics: HashMap::from([
                 (HOST.to_string(), TOPIC.to_string()),
                 ("host2".to_string(), "topic2".to_string()),
@@ -183,16 +215,17 @@ mod store_test {
             ..init_service_config()
         });
 
-        assert!(store.push(Request { ..init_request() }).is_none());
+        assert!(store.push(Request { ..init_request() }).unwrap().is_none());
         assert!(store
             .push(Request {
                 host: "host2".to_string(),
                 ..init_request()
             })
+            .unwrap()
             .is_none());
-        assert!(store.push(Request { ..init_request() }).is_none());
+        assert!(store.push(Request { ..init_request() }).unwrap().is_none());
 
-        assert_eq!(store.pop_all().len(), 2);
+        assert_eq!(store.pop_all().unwrap().len(), 2);
     }
 
     fn init_service_config() -> ServiceConfig {

@@ -1,4 +1,6 @@
-use ::tracing::{error, info};
+use std::sync::Arc;
+
+use ::tracing::info;
 use anyhow::Ok;
 use tokio::sync::mpsc;
 
@@ -25,21 +27,18 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let (kafka_sender, kafka_receiver) = mpsc::channel::<(String, Vec<service::Request>)>(32);
-    let cfg = app_config.clone();
-    tokio::spawn(async move {
-        if let Err(e) = kafka::producer(kafka_receiver, cfg).await {
-            error!("kafka producer: {}", e)
-        }
-    });
+    let mut kafka_producer = kafka::Service::new(&app_config, kafka_receiver)?;
+    tokio::spawn(async move { kafka_producer.run().await });
 
-    let (request_sender, request_receiver) = mpsc::channel::<service::Request>(32);
     let cfg = app_config.service.clone();
-    tokio::spawn(async move { service::process(request_receiver, kafka_sender, cfg).await });
+    let store = Arc::new(service::Store::new(&app_config.service));
 
     let data = server::AppState {
         config: app_config.clone(),
-        sender: request_sender,
+        sender: kafka_sender.clone(),
+        store: store.clone(),
     };
+    tokio::spawn(async move { service::process(store, kafka_sender, cfg).await });
 
     init_server(app_config.server, init_api_metrics(), data)?.await?;
 
