@@ -27,6 +27,7 @@ tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 
 actix-web = "4"
 actix-web-prom = "0.6.0"
+actix-server = "2.1.1"
 
 kafka = "0.9"
 

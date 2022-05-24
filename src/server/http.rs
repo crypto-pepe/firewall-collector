@@ -1,4 +1,4 @@
-use actix_web::{dev, web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
 use actix_web_prom::PrometheusMetrics;
 use core::result::Result::Ok;
 use std::sync::Arc;
@@ -20,7 +20,7 @@ pub fn init_server(
     config: config::ServerConfig,
     metrics: PrometheusMetrics,
     data: AppState,
-) -> anyhow::Result<dev::Server> {
+) -> anyhow::Result<actix_server::Server> {
     let data = web::Data::new(data);
     match HttpServer::new(move || {
         App::new()
@@ -56,15 +56,16 @@ async fn default_handler(
     };
 
     match state.store.push(req) {
-        Ok(s) => {
-            if let Some((topic, requests)) = s {
-                if let Err(e) = state.sender.send((topic.clone(), requests)).await {
+        Ok(s) => match s {
+            Some((topic, requests)) => match state.sender.send((topic.clone(), requests)).await {
+                Ok(_) => Ok(HttpResponse::Created().finish()),
+                Err(e) => {
                     error!("{}", e);
-                    return Err(Error::InternalError);
+                    Err(Error::InternalError)
                 }
-            }
-            Ok(HttpResponse::Created().body(""))
-        }
+            },
+            None => Ok(HttpResponse::Created().finish()),
+        },
         Err(e) => match e {
             service::Error::InternalError(e) => {
                 error!("{}", e);
@@ -72,7 +73,7 @@ async fn default_handler(
             }
             service::Error::Reject(e) => {
                 warn!("{}", e);
-                Ok(HttpResponse::NoContent().body(""))
+                Ok(HttpResponse::NoContent().finish())
             }
         },
     }

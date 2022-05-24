@@ -14,27 +14,41 @@ pub async fn process(
     store: Arc<Store>,
     kafka_sender: mpsc::Sender<(String, Vec<Request>)>,
     config: ServiceConfig,
+    mut stop: mpsc::Receiver<()>,
+    stopped: mpsc::Sender<()>,
 ) {
     let mut delay = tokio::time::interval(config.max_collect_chunk_duration.into());
 
     loop {
         tokio::select! {
-            _ = delay.tick() => {
-                match store.pop_all() {
-                    Ok(mut c) => {
-                        let fs = c
-                            .iter_mut()
-                            .filter(|(_, requests)| !requests.is_empty())
-                            .map(|(topic, requests)| kafka_sender.send((topic.clone(), requests.clone())))
-                            .collect::<Vec<_>>();
+            _ = stop.recv() => {
+                pop_all(store.clone(), kafka_sender.clone()).await;
+                if let Err(e) = stopped.send(()).await {
+                    error!("stopped: {}", e)
+                };
+                break
+            }
 
-                        if let Err(e) = try_join_all(fs).await {
-                            error!("kafka_sender: {}", e)
-                        }
-                    }
-                    Err(e) => error!("{}", e),
-                }
+            _ = delay.tick() => {
+                pop_all(store.clone(), kafka_sender.clone()).await;
             }
         }
+    }
+}
+
+async fn pop_all(store: Arc<Store>, kafka_sender: mpsc::Sender<(String, Vec<Request>)>) {
+    match store.pop_all() {
+        Ok(mut c) => {
+            let fs = c
+                .iter_mut()
+                .filter(|(_, requests)| !requests.is_empty())
+                .map(|(topic, requests)| kafka_sender.send((topic.clone(), requests.clone())))
+                .collect::<Vec<_>>();
+
+            if let Err(e) = try_join_all(fs).await {
+                error!("kafka_sender: {}", e)
+            }
+        }
+        Err(e) => error!("{}", e),
     }
 }
