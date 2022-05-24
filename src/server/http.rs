@@ -1,12 +1,14 @@
 use actix_web::{dev, web, App, HttpRequest, HttpResponse, HttpServer};
 use actix_web_prom::PrometheusMetrics;
-use anyhow::Result;
 use core::result::Result::Ok;
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use tracing::{error, warn};
 
 use crate::config::{self, AppConfig};
 use crate::service::{self, Request};
+
+use super::error::Error;
 
 pub struct AppState {
     pub config: AppConfig,
@@ -18,7 +20,7 @@ pub fn init_server(
     config: config::ServerConfig,
     metrics: PrometheusMetrics,
     data: AppState,
-) -> Result<dev::Server> {
+) -> anyhow::Result<dev::Server> {
     let data = web::Data::new(data);
     match HttpServer::new(move || {
         App::new()
@@ -39,49 +41,39 @@ async fn default_handler(
     req: HttpRequest,
     body: web::Bytes,
     state: web::Data<AppState>,
-) -> HttpResponse {
+) -> Result<HttpResponse, Error> {
     if body.len() > state.config.server.payload_max_size {
-        return HttpResponse::NoContent().body("request body is too large");
+        warn!("request body too large");
+        return Ok(HttpResponse::NoContent().body(""));
     }
 
-    let req = Request {
-        remote_ip: match req.peer_addr() {
-            Some(n) => n.ip().to_string(),
-            None => String::new(),
-        },
-        host: match req.uri().host() {
-            Some(n) => String::from(n),
-            None => String::new(),
-        },
-        method: req.method().to_string(),
-        path: req.uri().to_string(),
-        headers: req
-            .headers()
-            .iter()
-            .map(|(header_name, header_value)| -> (String, String) {
-                (
-                    header_name.to_string(),
-                    match header_value.to_str() {
-                        Ok(s) => String::from(s),
-                        Err(_) => String::new(),
-                    },
-                )
-            })
-            .collect(),
-        body: String::from_utf8(body.to_vec()).unwrap(),
+    let req = match Request::new(req, body) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("{}", e);
+            return Err(Error::InternalError);
+        }
     };
 
     match state.store.push(req) {
         Ok(s) => {
             if let Some((topic, requests)) = s {
                 if let Err(e) = state.sender.send((topic.clone(), requests)).await {
-                    HttpResponse::InternalServerError().body(e.to_string());
+                    error!("{}", e);
+                    return Err(Error::InternalError);
                 }
             }
-            HttpResponse::Created().body("")
+            Ok(HttpResponse::Created().body(""))
         }
-        Err(e) => HttpResponse::NoContent()
-            .reason(Box::leak(e.to_string().into_boxed_str()))
-            .body(""),
+        Err(e) => match e {
+            service::Error::InternalError(e) => {
+                error!("{}", e);
+                Err(Error::InternalError)
+            }
+            service::Error::Reject(e) => {
+                warn!("{}", e);
+                Ok(HttpResponse::NoContent().body(""))
+            }
+        },
     }
 }

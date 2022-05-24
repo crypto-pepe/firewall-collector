@@ -5,4 +5,4 @@ mod store;
 
 pub use process::process;
 pub use request::Request;
-pub use store::Store;
+pub use store::{Error, Store};

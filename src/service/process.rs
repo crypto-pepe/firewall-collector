@@ -20,15 +20,19 @@ pub async fn process(
     loop {
         tokio::select! {
             _ = delay.tick() => {
-                let fs = store
-                    .pop_all()
-                    .iter_mut()
-                    .filter(|(_, requests)| !requests.is_empty())
-                    .map(|(topic, requests)| kafka_sender.send((topic.clone(), requests.clone())))
-                    .collect::<Vec<_>>();
+                match store.pop_all() {
+                    Ok(mut c) => {
+                        let fs = c
+                            .iter_mut()
+                            .filter(|(_, requests)| !requests.is_empty())
+                            .map(|(topic, requests)| kafka_sender.send((topic.clone(), requests.clone())))
+                            .collect::<Vec<_>>();
 
-                if let Err(e) = try_join_all(fs).await {
-                    error!("kafka_sender: {}", e)
+                        if let Err(e) = try_join_all(fs).await {
+                            error!("kafka_sender: {}", e)
+                        }
+                    }
+                    Err(e) => error!("{}", e),
                 }
             }
         }

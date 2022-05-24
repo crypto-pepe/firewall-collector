@@ -1,6 +1,7 @@
 use crate::config::ServiceConfig;
 use deepsize::DeepSizeOf;
 use std::{collections::HashMap, sync::Mutex};
+use thiserror::Error;
 
 use super::{cleaner, Request};
 
@@ -42,6 +43,14 @@ impl Chunk {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("internal error: {0}")]
+    InternalError(String),
+    #[error("reject: '{0}'")]
+    Reject(String),
+}
+
 #[derive(Debug)]
 pub struct Store {
     chunks_by_topics: Mutex<HashMap<String, Chunk>>,
@@ -68,51 +77,59 @@ impl Store {
     }
 
     // return requests if chunk is full
-    pub fn push(&self, request: Request) -> Result<Option<(String, Vec<Request>)>, anyhow::Error> {
+    pub fn push(&self, request: Request) -> Result<Option<(String, Vec<Request>)>, Error> {
         let request = self.clean(request);
 
         let topic = match self.hosts_to_topics.get(&request.host) {
             Some(t) => t,
             None => {
-                return Err(anyhow::anyhow!("host {} not supported", request.host));
+                return Err(Error::Reject(format!(
+                    "host {} not supported",
+                    request.host
+                )));
             }
         };
 
         let mut chunks_by_topics = match self.chunks_by_topics.lock() {
             Ok(c) => c,
             Err(e) => {
-                return Err(anyhow::anyhow!("chunks_by_topics.lock(): {}", e));
+                return Err(Error::InternalError(format!(
+                    "chunks_by_topics.lock(): {}",
+                    e
+                )));
             }
         };
 
         match chunks_by_topics.get_mut(topic) {
-            Some(chunk) => {
-                if chunk.is_full(&request) {
+            Some(chunk) => match chunk.is_full(&request) {
+                true => {
                     let reqs = chunk.pop_all();
                     chunk.push(request.clone());
-                    return Ok(Option::Some((topic.clone(), reqs)));
+                    Ok(Option::Some((topic.clone(), reqs)))
                 }
-                chunk.push(request.clone());
-            }
+                false => {
+                    chunk.push(request.clone());
+                    Ok(Option::None)
+                }
+            },
             None => {
                 let mut ch = Chunk::new(self.max_size_chunk, self.max_len_chunk);
                 ch.push(request.clone());
                 chunks_by_topics.insert(topic.clone(), ch);
+                Ok(Option::None)
             }
         }
-
-        Ok(Option::None)
     }
 
     // return all requests from all chunks
-    pub fn pop_all(&self) -> Vec<(String, Vec<Request>)> {
-        return self
-            .chunks_by_topics
-            .lock()
-            .unwrap()
-            .iter_mut()
-            .map(|(topic, chunk)| (topic.clone(), chunk.pop_all()))
-            .collect();
+    pub fn pop_all(&self) -> Result<Vec<(String, Vec<Request>)>, Error> {
+        match self.chunks_by_topics.lock() {
+            Ok(mut c) => Ok(c
+                .iter_mut()
+                .map(|(topic, chunk)| (topic.clone(), chunk.pop_all()))
+                .collect()),
+            Err(e) => Err(Error::InternalError(e.to_string())),
+        }
     }
 
     fn clean(&self, request: Request) -> Request {
@@ -161,7 +178,7 @@ mod store_test {
         };
 
         // check last request
-        assert_eq!(store.pop_all()[0].1.len(), 1);
+        assert_eq!(store.pop_all().unwrap()[0].1.len(), 1);
     }
 
     #[test]
@@ -208,7 +225,7 @@ mod store_test {
             .is_none());
         assert!(store.push(Request { ..init_request() }).unwrap().is_none());
 
-        assert_eq!(store.pop_all().len(), 2);
+        assert_eq!(store.pop_all().unwrap().len(), 2);
     }
 
     fn init_service_config() -> ServiceConfig {

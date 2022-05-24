@@ -380,6 +380,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "deepsize",
+ "derive_more",
  "futures",
  "kafka",
  "pepe-config",
