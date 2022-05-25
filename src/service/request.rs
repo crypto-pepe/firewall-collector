@@ -15,7 +15,11 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn new(request: HttpRequest, body: web::Bytes) -> anyhow::Result<Request> {
+    pub fn new(
+        host_header: &str,
+        request: HttpRequest,
+        body: web::Bytes,
+    ) -> anyhow::Result<Request> {
         let req = Request {
             remote_ip: match request.peer_addr() {
                 Some(n) => n.ip().to_string(),
@@ -24,7 +28,7 @@ impl Request {
             host: match request
                 .headers()
                 .iter()
-                .find(|(name, _)| name.as_str() == "host")
+                .find(|(name, _)| name.as_str() == host_header)
             {
                 Some((_, value)) => String::from(value.to_str()?),
                 None => String::from("127.0.0.1"),
