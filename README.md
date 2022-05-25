@@ -24,7 +24,7 @@ If CONFIG_PATH is not stated then ./config.yaml will be used
 | server.host                        | No       | Socket host to bind. Default `0.0.0.0`.                                                          |
 | server.port                        | No       | Socket port to bind. Default `8080`.                                                             |
 | server.payload_max_size            | Yes      | Maxumum size HTTP body in bytes.                                                                 |
-| service.host_header                | Yes      | Header name for extracting `host` from the request.                                              |
+| service.host_header                | Yes      | Header name for extracting `host` from the request. Should be lower-cased.                       |
 | service.max_len_chunk              | Yes      | Maximum number requests in the chunk.                                                            |
 | service.max_size_chunk             | Yes      | Maximum size chunk in bytes.                                                                     |
 | service.max_collect_chunk_duration | Yes      | How long does accumulate chunk.                                                                  |
