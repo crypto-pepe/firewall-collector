@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use futures::future::try_join_all;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tracing::error;
 
 use crate::config::ServiceConfig;
@@ -14,24 +14,26 @@ pub async fn process(
     store: Arc<Store>,
     kafka_sender: mpsc::Sender<(String, Vec<Request>)>,
     config: ServiceConfig,
-    mut stop: mpsc::Receiver<()>,
-    stopped: mpsc::Sender<()>,
+    stop: oneshot::Receiver<()>,
+    stopped: oneshot::Sender<()>,
 ) {
     let mut delay = tokio::time::interval(config.max_collect_chunk_duration.into());
 
-    loop {
-        tokio::select! {
-            _ = stop.recv() => {
+    tokio::select! {
+        _ = async {
+            loop {
+                tokio::select! {
+                    _ = delay.tick() => {
+                        pop_all(store.clone(), kafka_sender.clone()).await;
+                    }
+                }
+            }
+        } => {}
+        _ = stop => {
                 pop_all(store.clone(), kafka_sender.clone()).await;
-                if let Err(e) = stopped.send(()).await {
-                    error!("stopped: {}", e)
+                if  stopped.send(()).is_err() {
+                    error!("tick_tock.stopped.send() is failed")
                 };
-                break
-            }
-
-            _ = delay.tick() => {
-                pop_all(store.clone(), kafka_sender.clone()).await;
-            }
         }
     }
 }

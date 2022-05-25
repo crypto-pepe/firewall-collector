@@ -1,8 +1,7 @@
-use std::sync::Arc;
-
 use ::tracing::info;
+use std::sync::Arc;
 use tokio::signal;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::metrics::init_api_metrics;
 use crate::server::init_server;
@@ -16,16 +15,16 @@ mod service;
 mod tracing;
 
 struct TickTock {
-    tick_sender: mpsc::Sender<()>,
-    tick_receiver: mpsc::Receiver<()>,
-    tock_sender: mpsc::Sender<()>,
-    tock_receiver: mpsc::Receiver<()>,
+    tick_sender: oneshot::Sender<()>,
+    tick_receiver: oneshot::Receiver<()>,
+    tock_sender: oneshot::Sender<()>,
+    tock_receiver: oneshot::Receiver<()>,
 }
 
 impl TickTock {
     fn new() -> TickTock {
-        let (tick_sender, tick_receiver) = mpsc::channel::<()>(1);
-        let (tock_sender, tock_receiver) = mpsc::channel::<()>(1);
+        let (tick_sender, tick_receiver) = oneshot::channel();
+        let (tock_sender, tock_receiver) = oneshot::channel();
         TickTock {
             tick_sender,
             tick_receiver,
@@ -48,7 +47,7 @@ async fn main() -> anyhow::Result<()> {
 
     let metrics = init_api_metrics();
 
-    let mut tick_tock = TickTock::new();
+    let tick_tock = TickTock::new();
 
     let (kafka_sender, kafka_receiver) = mpsc::channel::<(String, Vec<service::Request>)>(32);
     let mut kafka_producer = kafka::Service::new(&app_config, kafka_receiver)?;
@@ -78,27 +77,44 @@ async fn main() -> anyhow::Result<()> {
 
     tokio::spawn(async move { server.await });
 
+    graceful_chutdown(srv_handle, tick_tock.tick_sender, tick_tock.tock_receiver).await
+}
+
+async fn graceful_chutdown(
+    server: actix_server::ServerHandle,
+    tick_sender: oneshot::Sender<()>,
+    tock_receiver: oneshot::Receiver<()>,
+) -> anyhow::Result<()> {
     match signal::ctrl_c().await {
         Ok(()) => {
-            srv_handle.stop(true).await;
-            info!("server stop");
-            tick_tock.tick_sender.send(()).await?;
-            tick_tock.tock_receiver.recv().await;
-            info!("process stop");
+            info!("graceful shutdown started");
+            let (shutdown_sender, shutdown_receiver) = oneshot::channel();
+            tokio::spawn(async move {
+                let sleep = tokio::time::sleep(tokio::time::Duration::from_secs(4));
+                tokio::pin!(sleep);
 
-            let mut delay = tokio::time::interval(tokio::time::Duration::from_secs(5));
-            loop {
                 tokio::select! {
-                    _ = tick_tock.tock_receiver.recv() => {
-                        info!("graceful shutdown successfully");
-                        break
-                    }
+                    _ = shutdown_receiver => {}
 
-                    _ = delay.tick() => {
-                        return Err(anyhow::anyhow!("graceful shutdown failed"))
+                    _ = &mut sleep => {
+                        panic!("graceful shutdown failed");
                     }
                 }
+            });
+
+            server.stop(true).await;
+            info!("server stop");
+            if tick_sender.send(()).is_err() {
+                return Err(anyhow::anyhow!("tick_sender.send() is failed"));
+            };
+            if let Err(e) = tock_receiver.await {
+                return Err(anyhow::anyhow!("tick_tock.tock_receiver: {}", e));
+            };
+            info!("process stop");
+            if shutdown_sender.send(()).is_err() {
+                return Err(anyhow::anyhow!("shutdown_receiver.send() failed"));
             }
+            info!("graceful shutdown successfully");
 
             anyhow::Ok(())
         }
