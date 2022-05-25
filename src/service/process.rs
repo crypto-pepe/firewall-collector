@@ -8,8 +8,7 @@ use crate::config::ServiceConfig;
 
 use super::{store::Store, Request};
 
-// process is handler for storing receiving Requests into Store and sending
-// them to Kafka sender if chunk is full or by timer.
+// Process is processing sending Requests to Kafka by timer.
 pub async fn process(
     store: Arc<Store>,
     kafka_sender: mpsc::Sender<(String, Vec<Request>)>,
