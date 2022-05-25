@@ -21,8 +21,12 @@ impl Request {
                 Some(n) => n.ip().to_string(),
                 None => String::new(),
             },
-            host: match request.uri().host() {
-                Some(n) => String::from(n),
+            host: match request
+                .headers()
+                .iter()
+                .find(|(name, _)| name.as_str() == "host")
+            {
+                Some((_, value)) => String::from(value.to_str()?),
                 None => String::from("127.0.0.1"),
             },
             method: request.method().to_string(),
