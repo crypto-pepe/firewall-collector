@@ -3,6 +3,7 @@ server:
   port: 8080
   payload_max_size: 5120
 service:
+  host_header: host
   max_len_chunk: 100
   max_size_chunk: 1048576
   max_collect_chunk_duration: 3s
@@ -17,6 +18,5 @@ service:
     - 'key2'
 kafka:
   brokers:
-    - "localhost:9092"
+    - 'localhost:9092'
   ack_timeout: 1s
-

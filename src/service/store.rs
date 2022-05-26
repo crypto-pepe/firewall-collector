@@ -230,6 +230,7 @@ mod store_test {
 
     fn init_service_config() -> ServiceConfig {
         ServiceConfig {
+            host_header: "custom_host_header".to_string(),
             max_size_chunk: 2048,
             max_len_chunk: 10,
             sensitive_headers: Vec::from(["some_header".to_string()]),

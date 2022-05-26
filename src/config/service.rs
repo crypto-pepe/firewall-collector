@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServiceConfig {
+    pub host_header: String,
     pub max_size_chunk: usize,
     pub max_len_chunk: usize,
     pub max_collect_chunk_duration: DurationString,

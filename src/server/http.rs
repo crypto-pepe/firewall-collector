@@ -47,7 +47,7 @@ async fn default_handler(
         return Ok(HttpResponse::NoContent().body(""));
     }
 
-    let req = match Request::new(req, body) {
+    let req = match Request::new(&state.config.service.host_header, req, body) {
         Ok(r) => r,
         Err(e) => {
             error!("{}", e);
