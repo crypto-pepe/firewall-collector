@@ -144,7 +144,7 @@ impl Store {
 #[cfg(test)]
 mod store_test {
     use super::{Request, Store};
-    use crate::config::ServiceConfig;
+    use crate::config::{RequestConfig, ServiceConfig};
     use pepe_config::DurationString;
     use std::{collections::HashMap, time::Duration};
 
@@ -230,7 +230,10 @@ mod store_test {
 
     fn init_service_config() -> ServiceConfig {
         ServiceConfig {
-            host_header: "custom_host_header".to_string(),
+            request: RequestConfig {
+                host_header: "custom_host_header".to_string(),
+                ip_header: "ip_header".to_string(),
+            },
             max_size_chunk: 2048,
             max_len_chunk: 10,
             sensitive_headers: Vec::from(["some_header".to_string()]),

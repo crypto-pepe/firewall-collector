@@ -2,9 +2,11 @@ use pepe_config::DurationString;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use super::request::RequestConfig;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServiceConfig {
-    pub host_header: String,
+    pub request: RequestConfig,
     pub max_size_chunk: usize,
     pub max_len_chunk: usize,
     pub max_collect_chunk_duration: DurationString,

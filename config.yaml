@@ -3,7 +3,9 @@ server:
   port: 8080
   payload_max_size: 5120
 service:
-  host_header: host
+  request:
+    host_header: host
+    ip_header: header
   max_len_chunk: 100
   max_size_chunk: 1048576
   max_collect_chunk_duration: 3s

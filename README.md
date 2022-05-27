@@ -11,7 +11,7 @@ The topics from parameter `service.hosts_to_topics` of the config have to be cre
 ### Environment variables
 
 | Name        | Required | Note                                                                     |
-| ----------- | -------- | ------------------------------------------------------------------------ |
+|-------------|----------|--------------------------------------------------------------------------|
 | RUST_LOG    | No       | Log level. https://docs.rs/env_logger/0.9.0/env_logger/#enabling-logging |
 | CONFIG_PATH | No       | Path to the `yaml` formatted config file                                 |
 
@@ -20,11 +20,12 @@ The topics from parameter `service.hosts_to_topics` of the config have to be cre
 If CONFIG_PATH is not stated then ./config.yaml will be used
 
 | Name                               | Required | Note                                                                                             |
-| ---------------------------------- | -------- | ------------------------------------------------------------------------------------------------ |
+|------------------------------------|----------|--------------------------------------------------------------------------------------------------|
 | server.host                        | No       | Socket host to bind. Default `0.0.0.0`.                                                          |
 | server.port                        | No       | Socket port to bind. Default `8080`.                                                             |
 | server.payload_max_size            | Yes      | Maxumum size HTTP body in bytes.                                                                 |
-| service.host_header                | Yes      | Header name for extracting `host` from the request. Should be lower-cased.                       |
+| service.request.host_header        | Yes      | Header name for extracting `host` from the request. Should be lower-cased.                       |
+| service.request.ip_header          | Yes      | Header name for extracting `ip` from the request. Should be lower-cased.                         |
 | service.max_len_chunk              | Yes      | Maximum number requests in the chunk.                                                            |
 | service.max_size_chunk             | Yes      | Maximum size chunk in bytes.                                                                     |
 | service.max_collect_chunk_duration | Yes      | How long does accumulate chunk.                                                                  |
@@ -41,6 +42,6 @@ Each of the configuration parameter can be overridden via the environment variab
 Example:
 
 | Parameter name | Env. variable |
-| -------------- | ------------- |
+|----------------|---------------|
 | some_field     | SOME_FIELD    |
 | server.port    | SERVER.PORT   |
