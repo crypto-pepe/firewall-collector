@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use futures::future::try_join_all;
 use tokio::sync::mpsc;
-use tracing::error;
+use tracing::{debug, error};
 
 use crate::config::ServiceConfig;
 
@@ -25,7 +25,10 @@ pub async fn process(
                         let fs = c
                             .iter_mut()
                             .filter(|(_, requests)| !requests.is_empty())
-                            .map(|(topic, requests)| kafka_sender.send((topic.clone(), requests.clone())))
+                            .map(|(topic, requests)| {
+                                requests.iter().for_each(|r| debug!("{}: {:?}", topic, r));
+                                kafka_sender.send((topic.clone(), requests.clone()))
+                            })
                             .collect::<Vec<_>>();
 
                         if let Err(e) = try_join_all(fs).await {
