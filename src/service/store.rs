@@ -242,6 +242,7 @@ mod store_test {
 
     fn init_request() -> Request {
         Request {
+            timestamp: 1,
             remote_ip: String::from("0.0.0.0"),
             host: String::from(HOST.to_string()),
             method: String::from("POST"),

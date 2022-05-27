@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::SystemTime};
 
 use actix_web::{web, HttpRequest};
 use deepsize::DeepSizeOf;
@@ -6,6 +6,7 @@ use serde::Serialize;
 
 #[derive(Debug, Serialize, DeepSizeOf, Clone, PartialEq)]
 pub struct Request {
+    pub timestamp: u64,
     pub remote_ip: String,
     pub host: String,
     pub method: String,
@@ -23,6 +24,10 @@ impl Request {
         let req = Request {
             remote_ip: match request.peer_addr() {
                 Some(n) => n.ip().to_string(),
+            timestamp: match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+                Ok(t) => t.as_secs(),
+                Err(e) => return Err(anyhow::anyhow!("{}", e.to_string())),
+            },
                 None => String::new(),
             },
             host: match request
