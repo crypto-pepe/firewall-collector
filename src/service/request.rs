@@ -4,8 +4,11 @@ use actix_web::{web, HttpRequest};
 use deepsize::DeepSizeOf;
 use serde::Serialize;
 
+use crate::config::RequestConfig;
+
 #[derive(Debug, Serialize, DeepSizeOf, Clone, PartialEq)]
 pub struct Request {
+    pub timestamp: String,
     pub remote_ip: String,
     pub host: String,
     pub method: String,
@@ -16,22 +19,37 @@ pub struct Request {
 
 impl Request {
     pub fn new(
-        host_header: &str,
-        request: HttpRequest,
+        request_config: &RequestConfig,
+        request: &HttpRequest,
         body: web::Bytes,
     ) -> anyhow::Result<Request> {
         let req = Request {
-            remote_ip: match request.peer_addr() {
-                Some(n) => n.ip().to_string(),
-                None => String::new(),
+            timestamp: chrono::offset::Utc::now().to_string(),
+            remote_ip: match request
+                .headers()
+                .iter()
+                .find(|(name, _)| name.as_str() == request_config.ip_header)
+            {
+                Some((_, value)) => String::from(value.to_str()?),
+                None => {
+                    return Err(anyhow::anyhow!(
+                        "ip_header: {} not found",
+                        request_config.ip_header
+                    ));
+                }
             },
             host: match request
                 .headers()
                 .iter()
-                .find(|(name, _)| name.as_str() == host_header)
+                .find(|(name, _)| name.as_str() == request_config.host_header)
             {
                 Some((_, value)) => String::from(value.to_str()?),
-                None => String::from("127.0.0.1"),
+                None => {
+                    return Err(anyhow::anyhow!(
+                        "host_header: {} not found",
+                        request_config.host_header
+                    ));
+                }
             },
             method: request.method().to_string(),
             path: request.uri().to_string(),
