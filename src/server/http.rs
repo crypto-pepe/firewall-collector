@@ -47,10 +47,10 @@ async fn default_handler(
         return Ok(HttpResponse::NoContent().body(""));
     }
 
-    let req = match Request::new(state.config.service.request.clone(), req, body) {
+    let req = match Request::new(&state.config.service.request, &req, body) {
         Ok(r) => r,
         Err(e) => {
-            error!("{}", e);
+            error!("{}: for request: {:?}", e, req);
             return Err(Error::InternalError);
         }
     };

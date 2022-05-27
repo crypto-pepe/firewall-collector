@@ -1,15 +1,14 @@
-use std::{collections::HashMap, time::SystemTime};
+use std::collections::HashMap;
 
 use actix_web::{web, HttpRequest};
 use deepsize::DeepSizeOf;
 use serde::Serialize;
-use tracing::log::warn;
 
 use crate::config::RequestConfig;
 
 #[derive(Debug, Serialize, DeepSizeOf, Clone, PartialEq)]
 pub struct Request {
-    pub timestamp: u64,
+    pub timestamp: String,
     pub remote_ip: String,
     pub host: String,
     pub method: String,
@@ -20,15 +19,12 @@ pub struct Request {
 
 impl Request {
     pub fn new(
-        request_config: RequestConfig,
-        request: HttpRequest,
+        request_config: &RequestConfig,
+        request: &HttpRequest,
         body: web::Bytes,
     ) -> anyhow::Result<Request> {
         let req = Request {
-            timestamp: match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-                Ok(t) => t.as_secs(),
-                Err(e) => return Err(anyhow::anyhow!("{}", e.to_string())),
-            },
+            timestamp: chrono::offset::Utc::now().to_string(),
             remote_ip: match request
                 .headers()
                 .iter()
@@ -36,8 +32,10 @@ impl Request {
             {
                 Some((_, value)) => String::from(value.to_str()?),
                 None => {
-                    warn!("ip_header: {} not found", request_config.ip_header);
-                    String::new()
+                    return Err(anyhow::anyhow!(
+                        "ip_header: {} not found",
+                        request_config.ip_header
+                    ));
                 }
             },
             host: match request
@@ -47,8 +45,10 @@ impl Request {
             {
                 Some((_, value)) => String::from(value.to_str()?),
                 None => {
-                    warn!("host_header: {} not found", request_config.host_header);
-                    String::from("")
+                    return Err(anyhow::anyhow!(
+                        "host_header: {} not found",
+                        request_config.host_header
+                    ));
                 }
             },
             method: request.method().to_string(),
