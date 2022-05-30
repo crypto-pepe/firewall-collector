@@ -41,7 +41,13 @@ async fn pop_all(store: Arc<Store>, kafka_sender: mpsc::Sender<(String, Vec<Requ
                 .iter_mut()
                 .filter(|(_, requests)| !requests.is_empty())
                 .map(|(topic, requests)| {
-                    requests.iter().for_each(|r| debug!("{}: {:?}", topic, r));
+                    requests.iter().for_each(|r| {
+                        debug!(
+                            "{}",
+                            serde_json::to_string(&r)
+                                .expect("Error occurred while serializing Request to JSON")
+                        )
+                    });
                     kafka_sender.send((topic.clone(), requests.clone()))
                 })
                 .collect::<Vec<_>>();
