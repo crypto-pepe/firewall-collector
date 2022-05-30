@@ -6,7 +6,7 @@ use serde::Serialize;
 
 use crate::config::RequestConfig;
 
-#[derive(Debug, Serialize, DeepSizeOf, Clone, PartialEq)]
+#[derive(Debug, Serialize, DeepSizeOf, Clone, PartialEq, valuable::Valuable)]
 pub struct Request {
     pub timestamp: String,
     pub remote_ip: String,
