@@ -26,7 +26,7 @@ pub async fn process(
                             .iter_mut()
                             .filter(|(_, requests)| !requests.is_empty())
                             .map(|(topic, requests)| {
-                                requests.iter().for_each(|r| debug!("{:?}", serde_json::to_string(&r).expect("Error occurred while serializing Request to JSON")));
+                                requests.iter().for_each(|r| debug!("{}", serde_json::to_string(&r).expect("Error occurred while serializing Request to JSON")));
                                 kafka_sender.send((topic.clone(), requests.clone()))
                             })
                             .collect::<Vec<_>>();
