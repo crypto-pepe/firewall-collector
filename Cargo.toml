@@ -7,6 +7,9 @@ edition = "2021"
 name = "service"
 path = "src/main.rs"
 
+[profile.release]
+panic = 'abort'
+
 [dependencies]
 async-trait = "0.1.52"
 deepsize = "0.2.0"
