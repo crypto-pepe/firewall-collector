@@ -21,11 +21,8 @@ pub async fn process(
     tokio::select! {
         _ = async {
             loop {
-                tokio::select! {
-                    _ = delay.tick() => {
-                        pop_all(store.clone(), kafka_sender.clone()).await;
-                    }
-                }
+                delay.tick().await;
+                pop_all(store.clone(), kafka_sender.clone()).await;
             }
         } => {}
         _ = stop => {

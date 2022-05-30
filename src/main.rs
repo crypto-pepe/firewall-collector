@@ -1,9 +1,10 @@
-use ::tracing::info;
+use ::tracing::{error, info};
 use std::sync::Arc;
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::metrics::init_api_metrics;
+use crate::ticktock::TickTock;
 use crate::tracing::init_tracing;
 
 mod config;
@@ -11,27 +12,10 @@ mod kafka;
 mod metrics;
 mod server;
 mod service;
+mod ticktock;
 mod tracing;
 
-struct TickTock {
-    tick_sender: oneshot::Sender<()>,
-    tick_receiver: oneshot::Receiver<()>,
-    tock_sender: oneshot::Sender<()>,
-    tock_receiver: oneshot::Receiver<()>,
-}
-
-impl TickTock {
-    fn new() -> TickTock {
-        let (tick_sender, tick_receiver) = oneshot::channel();
-        let (tock_sender, tock_receiver) = oneshot::channel();
-        TickTock {
-            tick_sender,
-            tick_receiver,
-            tock_sender,
-            tock_receiver,
-        }
-    }
-}
+static SHUTDOWN_INTERVAL_SEC: u64 = 5;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -73,10 +57,17 @@ async fn main() -> anyhow::Result<()> {
 
     let server = server::Server::run(app_config.server, metrics, data)?;
 
-    graceful_chutdown(server, tick_tock.tick_sender, tick_tock.tock_receiver).await
+    graceful_shutdown(
+        SHUTDOWN_INTERVAL_SEC,
+        server,
+        tick_tock.tick_sender,
+        tick_tock.tock_receiver,
+    )
+    .await
 }
 
-async fn graceful_chutdown(
+async fn graceful_shutdown(
+    shutdown_interval_sec: u64,
     server: server::Server,
     tick_sender: oneshot::Sender<()>,
     tock_receiver: oneshot::Receiver<()>,
@@ -91,13 +82,14 @@ async fn graceful_chutdown(
     info!("graceful shutdown started");
     let (shutdown_sender, shutdown_receiver) = oneshot::channel();
     tokio::spawn(async move {
-        let sleep = tokio::time::sleep(tokio::time::Duration::from_secs(4));
+        let sleep = tokio::time::sleep(tokio::time::Duration::from_secs(shutdown_interval_sec));
         tokio::pin!(sleep);
 
         tokio::select! {
             _ = shutdown_receiver => {}
 
             _ = &mut sleep => {
+                error!("graceful shutdown failed");
                 panic!("graceful shutdown failed");
             }
         }
