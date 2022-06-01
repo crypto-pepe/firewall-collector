@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use futures::future::try_join_all;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 use tracing::{debug, error};
 
-use crate::config::ServiceConfig;
+use crate::{config::ServiceConfig, ticktock::TickTock};
 
 use super::{store::Store, Request};
 
@@ -13,8 +13,7 @@ pub async fn process(
     store: Arc<Store>,
     kafka_sender: mpsc::Sender<(String, Vec<Request>)>,
     config: ServiceConfig,
-    stop: oneshot::Receiver<()>,
-    stopped: oneshot::Sender<()>,
+    tick_tock: Arc<TickTock>,
 ) {
     let mut delay = tokio::time::interval(config.max_collect_chunk_duration.into());
 
@@ -25,11 +24,9 @@ pub async fn process(
                 pop_all(store.clone(), kafka_sender.clone()).await;
             }
         } => {}
-        _ = stop => {
-                pop_all(store.clone(), kafka_sender.clone()).await;
-                if  stopped.send(()).is_err() {
-                    error!("tick_tock.stopped.send() is failed")
-                };
+        _ = tick_tock.on_stop() => {
+            pop_all(store.clone(), kafka_sender.clone()).await;
+            tick_tock.close().await;
         }
     }
 }
