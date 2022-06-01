@@ -1,4 +1,4 @@
-use ::tracing::{error, info};
+use ::tracing::info;
 use std::sync::Arc;
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::{mpsc, oneshot};
@@ -34,7 +34,7 @@ async fn main() -> anyhow::Result<()> {
 
     let (kafka_sender, kafka_receiver) = mpsc::channel::<(String, Vec<service::Request>)>(32);
     let mut kafka_producer = kafka::Service::new(&app_config, kafka_receiver)?;
-    tokio::spawn(async move { kafka_producer.run().await });
+    let kafka_handle = tokio::spawn(async move { kafka_producer.run().await });
 
     let cfg = app_config.service.clone();
     let store = Arc::new(service::Store::new(&app_config.service));
@@ -44,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
         sender: kafka_sender.clone(),
         store: store.clone(),
     };
-    tokio::spawn(async move {
+    let process_handle = tokio::spawn(async move {
         service::process(
             store,
             kafka_sender,
@@ -55,15 +55,49 @@ async fn main() -> anyhow::Result<()> {
         .await
     });
 
-    let server = server::Server::run(app_config.server, metrics, data)?;
+    let (server, server_handle) = server::Server::run(app_config.server, metrics, data)?;
 
-    graceful_shutdown(
-        SHUTDOWN_INTERVAL_SEC,
-        server,
-        tick_tock.tick_sender,
-        tick_tock.tock_receiver,
-    )
-    .await
+    let mut sigint = signal(SignalKind::interrupt())?;
+    let mut sigterm = signal(SignalKind::terminate())?;
+    tokio::select! {
+        res = kafka_handle => { match res {
+            Ok(_) => {
+                info!("kafka task stopped");
+                Ok(())
+            },
+            Err(e)  => Err(anyhow::anyhow!(e)),
+        }}
+
+        res = process_handle => { match res {
+            Ok(_) => {
+                info!("process task stopped");
+                Ok(())
+            },
+            Err(e) => Err(anyhow::anyhow!(e)),
+        }}
+
+        res = server_handle => { match res {
+            Ok(_) => {
+                info!("server task stopped");
+                Ok(())
+            },
+            Err(e) => Err(anyhow::anyhow!(e)),
+        }}
+
+        _ = async {
+            tokio::select! {
+                _ = sigint.recv() => {},
+                _ = sigterm.recv() =>{}
+            }
+        }  => {
+            graceful_shutdown(
+                SHUTDOWN_INTERVAL_SEC,
+                server,
+                tick_tock.tick_sender,
+                tick_tock.tock_receiver,
+            ).await
+        }
+    }
 }
 
 async fn graceful_shutdown(
@@ -71,43 +105,27 @@ async fn graceful_shutdown(
     server: server::Server,
     tick_sender: oneshot::Sender<()>,
     tock_receiver: oneshot::Receiver<()>,
-) -> anyhow::Result<()> {
-    let mut sigint = signal(SignalKind::interrupt())?;
-    let mut sigterm = signal(SignalKind::terminate())?;
-    tokio::select! {
-        _ = sigint.recv() => {},
-        _ = sigterm.recv() =>{}
-    }
-
+) -> Result<(), anyhow::Error> {
     info!("graceful shutdown started");
-    let (shutdown_sender, shutdown_receiver) = oneshot::channel();
-    tokio::spawn(async move {
-        let sleep = tokio::time::sleep(tokio::time::Duration::from_secs(shutdown_interval_sec));
-        tokio::pin!(sleep);
+    tokio::select! {
+        res = async {
+            tokio::time::sleep(tokio::time::Duration::from_secs(shutdown_interval_sec)).await;
+            Err(anyhow::anyhow!("graceful shutdown failed"))
+        } => { res }
 
-        tokio::select! {
-            _ = shutdown_receiver => {}
+        res = async {
+            server.stop().await;
+            info!("server stopped");
+            if tick_sender.send(()).is_err() {
+                return Err(anyhow::anyhow!("tick_sender.send() is failed"));
+            };
+            if let Err(e) = tock_receiver.await {
+                return Err(anyhow::anyhow!("tick_tock.tock_receiver: {}", e));
+            };
+            info!("process stoped");
 
-            _ = &mut sleep => {
-                error!("graceful shutdown failed");
-                panic!("graceful shutdown failed");
-            }
-        }
-    });
-
-    server.stop().await;
-    info!("server stopped");
-    if tick_sender.send(()).is_err() {
-        return Err(anyhow::anyhow!("tick_sender.send() is failed"));
-    };
-    if let Err(e) = tock_receiver.await {
-        return Err(anyhow::anyhow!("tick_tock.tock_receiver: {}", e));
-    };
-    info!("process stoped");
-    if shutdown_sender.send(()).is_err() {
-        return Err(anyhow::anyhow!("shutdown_receiver.send() failed"));
+            info!("graceful shutdown successfully");
+            anyhow::Ok(())
+        } => { res }
     }
-    info!("graceful shutdown successfully");
-
-    anyhow::Ok(())
 }

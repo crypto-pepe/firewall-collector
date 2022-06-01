@@ -25,7 +25,7 @@ impl Server {
         config: config::ServerConfig,
         metrics: PrometheusMetrics,
         data: AppState,
-    ) -> anyhow::Result<Server> {
+    ) -> anyhow::Result<(Server, tokio::task::JoinHandle<Result<(), std::io::Error>>)> {
         let data = web::Data::new(data);
         let srv = match HttpServer::new(move || {
             App::new()
@@ -45,8 +45,8 @@ impl Server {
         let s = Server {
             srv_handle: srv.handle(),
         };
-        tokio::spawn(async move { srv.await });
-        Ok(s)
+        let server_handle = tokio::spawn(async move { srv.await });
+        Ok((s, server_handle))
     }
 
     pub async fn stop(&self) {
