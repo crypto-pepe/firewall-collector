@@ -7,6 +7,9 @@ edition = "2021"
 name = "service"
 path = "src/main.rs"
 
+[profile.release]
+panic = 'abort'
+
 [dependencies]
 async-trait = "0.1.52"
 deepsize = "0.2.0"
@@ -27,6 +30,7 @@ tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 
 actix-web = "4"
 actix-web-prom = "0.6.0"
+actix-server = "2.1.1"
 
 kafka = "0.9"
 

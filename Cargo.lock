@@ -388,6 +388,7 @@ dependencies = [
 name = "collector"
 version = "0.1.0"
 dependencies = [
+ "actix-server",
  "actix-web",
  "actix-web-prom",
  "anyhow",

@@ -1,4 +1,4 @@
-use actix_web::{dev, web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
 use actix_web_prom::PrometheusMetrics;
 use core::result::Result::Ok;
 use std::sync::Arc;
@@ -16,24 +16,41 @@ pub struct AppState {
     pub store: Arc<service::Store>,
 }
 
-pub fn init_server(
-    config: config::ServerConfig,
-    metrics: PrometheusMetrics,
-    data: AppState,
-) -> anyhow::Result<dev::Server> {
-    let data = web::Data::new(data);
-    match HttpServer::new(move || {
-        App::new()
-            .wrap(actix_web::middleware::Logger::default())
-            .wrap(tracing_actix_web::TracingLogger::default())
-            .wrap(metrics.clone())
-            .app_data(data.clone())
-            .default_service(web::to(default_handler))
-    })
-    .bind((config.host, config.port))
-    {
-        Ok(s) => Ok(s.run()),
-        Err(e) => Err(anyhow::anyhow!("{}", e)),
+pub struct Server {
+    srv_handle: actix_server::ServerHandle,
+}
+
+impl Server {
+    pub fn run(
+        config: config::ServerConfig,
+        metrics: PrometheusMetrics,
+        data: AppState,
+    ) -> anyhow::Result<(Server, tokio::task::JoinHandle<Result<(), std::io::Error>>)> {
+        let data = web::Data::new(data);
+        let srv = match HttpServer::new(move || {
+            App::new()
+                .wrap(actix_web::middleware::Logger::default())
+                .wrap(tracing_actix_web::TracingLogger::default())
+                .wrap(metrics.clone())
+                .app_data(data.clone())
+                .default_service(web::to(default_handler))
+        })
+        .disable_signals()
+        .bind((config.host, config.port))
+        {
+            Ok(s) => s.run(),
+            Err(e) => return Err(anyhow::anyhow!("{}", e)),
+        };
+
+        let s = Server {
+            srv_handle: srv.handle(),
+        };
+        let server_handle = tokio::spawn(async move { srv.await });
+        Ok((s, server_handle))
+    }
+
+    pub async fn stop(&self) {
+        self.srv_handle.stop(true).await;
     }
 }
 
@@ -56,15 +73,16 @@ async fn default_handler(
     };
 
     match state.store.push(req) {
-        Ok(s) => {
-            if let Some((topic, requests)) = s {
-                if let Err(e) = state.sender.send((topic.clone(), requests)).await {
+        Ok(s) => match s {
+            Some((topic, requests)) => match state.sender.send((topic.clone(), requests)).await {
+                Ok(_) => Ok(HttpResponse::Created().finish()),
+                Err(e) => {
                     error!("{}", e);
-                    return Err(Error::InternalError);
+                    Err(Error::InternalError)
                 }
-            }
-            Ok(HttpResponse::Created().body(""))
-        }
+            },
+            None => Ok(HttpResponse::Created().finish()),
+        },
         Err(e) => match e {
             service::Error::InternalError(e) => {
                 error!("{}", e);
@@ -72,7 +90,7 @@ async fn default_handler(
             }
             service::Error::Reject(e) => {
                 warn!("{}", e);
-                Ok(HttpResponse::NoContent().body(""))
+                Ok(HttpResponse::NoContent().finish())
             }
         },
     }

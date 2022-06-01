@@ -2,6 +2,7 @@ use crate::config::ServiceConfig;
 use deepsize::DeepSizeOf;
 use std::{collections::HashMap, sync::Mutex};
 use thiserror::Error;
+use tracing::error;
 
 use super::{cleaner, Request};
 
