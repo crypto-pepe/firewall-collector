@@ -108,15 +108,14 @@ async fn graceful_shutdown(
         res = async {
             server.stop().await;
             info!("server stopped");
+
             if tick_tock.stop().await.is_err() {
                 return Err(anyhow::anyhow!("tick_sender.send() is failed"));
             };
 
             tick_tock.closed().await;
 
-            info!("process stoped");
-
-            info!("graceful shutdown successfully");
+            info!("graceful shutdown successfully completed");
             anyhow::Ok(())
         } => { res }
     }
