@@ -4,8 +4,7 @@ use futures::future::try_join_all;
 use tokio::sync::mpsc;
 use tracing::{debug, error};
 
-use crate::{config::ServiceConfig, ticktock::TickTock};
-
+use crate::{config::ServiceConfig, ticktock::Shutdowner};
 use super::{store::Store, Request};
 
 // Process is processing sending Requests to Kafka by timer.
@@ -13,9 +12,14 @@ pub async fn process(
     store: Arc<Store>,
     kafka_sender: mpsc::Sender<(String, Vec<Request>)>,
     config: ServiceConfig,
-    tick_tock: Arc<TickTock>,
+    shutdowner: Arc<Shutdowner>,
 ) {
     let mut delay = tokio::time::interval(config.max_collect_chunk_duration.into());
+
+    let mut stopper = shutdowner
+        .stop_handle()
+        .await
+        .expect("Error occurred while extracting stopper from shutdowner");
 
     tokio::select! {
         _ = async {
@@ -24,9 +28,10 @@ pub async fn process(
                 pop_all(store.clone(), kafka_sender.clone()).await;
             }
         } => {}
-        _ = tick_tock.on_stop() => {
+        _ = &mut stopper => {
+            debug!("handle stop signal");
             pop_all(store.clone(), kafka_sender.clone()).await;
-            tick_tock.close().await;
+            shutdowner.stopped().await;
         }
     }
 }

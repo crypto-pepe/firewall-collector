@@ -4,7 +4,7 @@ use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::mpsc;
 
 use crate::metrics::init_api_metrics;
-use crate::ticktock::TickTock;
+use crate::ticktock::Shutdowner;
 use crate::tracing::init_tracing;
 
 mod config;
@@ -30,7 +30,7 @@ async fn main() -> anyhow::Result<()> {
 
     let metrics = init_api_metrics();
 
-    let tick_tock = Arc::new(TickTock::new());
+    let shutdowner = Arc::new(Shutdowner::new());
 
     let (kafka_sender, kafka_receiver) = mpsc::channel::<(String, Vec<service::Request>)>(32);
     let mut kafka_producer = kafka::Service::new(&app_config, kafka_receiver)?;
@@ -45,7 +45,7 @@ async fn main() -> anyhow::Result<()> {
         store: store.clone(),
     };
     let process_handle = {
-        let tick_tock = tick_tock.clone();
+        let tick_tock = shutdowner.clone();
         tokio::spawn(async move { service::process(store, kafka_sender, cfg, tick_tock).await })
     };
 
@@ -87,7 +87,7 @@ async fn main() -> anyhow::Result<()> {
             graceful_shutdown(
                 SHUTDOWN_INTERVAL_SEC,
                 server,
-             tick_tock
+             shutdowner
             ).await
         }
     }
@@ -96,7 +96,7 @@ async fn main() -> anyhow::Result<()> {
 async fn graceful_shutdown(
     shutdown_interval_sec: u64,
     server: server::Server,
-    tick_tock: Arc<TickTock>,
+    shutdowner: Arc<Shutdowner>,
 ) -> Result<(), anyhow::Error> {
     info!("graceful shutdown started");
     tokio::select! {
@@ -109,11 +109,11 @@ async fn graceful_shutdown(
             server.stop().await;
             info!("server stopped");
 
-            if tick_tock.stop().await.is_err() {
+            if shutdowner.stop().await.is_err() {
                 return Err(anyhow::anyhow!("tick_sender.send() is failed"));
             };
 
-            tick_tock.closed().await;
+            shutdowner.finished().await;
 
             info!("graceful shutdown successfully completed");
             anyhow::Ok(())
