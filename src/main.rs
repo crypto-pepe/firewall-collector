@@ -22,7 +22,8 @@ async fn main() -> anyhow::Result<()> {
     init_tracing();
     info!("start application");
 
-    let app_config = config::AppConfig::load()?;
+    let app_config =
+        config::AppConfig::load().map_err(|e| anyhow::anyhow!("config load: {}", e))?;
     info!(
         "config loaded:\n{:?}",
         serde_json::to_string_pretty(&app_config)?
@@ -33,7 +34,8 @@ async fn main() -> anyhow::Result<()> {
     let shutdowner = Arc::new(Shutdowner::new());
 
     let (kafka_sender, kafka_receiver) = mpsc::channel::<(String, Vec<service::Request>)>(32);
-    let mut kafka_producer = kafka::Service::new(&app_config, kafka_receiver)?;
+    let mut kafka_producer = kafka::Service::new(&app_config, kafka_receiver)
+        .map_err(|e| anyhow::anyhow!("kafka producer: {}", e))?;
     let kafka_handle = tokio::spawn(async move { kafka_producer.run().await });
 
     let cfg = app_config.service.clone();
@@ -49,7 +51,8 @@ async fn main() -> anyhow::Result<()> {
         tokio::spawn(async move { service::process(store, kafka_sender, cfg, tick_tock).await })
     };
 
-    let (server, server_handle) = server::Server::run(app_config.server, metrics, data)?;
+    let (server, server_handle) = server::Server::run(app_config.server, metrics, data)
+        .map_err(|e| anyhow::anyhow!("server run: {}", e))?;
 
     let mut sigint = signal(SignalKind::interrupt())?;
     let mut sigterm = signal(SignalKind::terminate())?;

@@ -34,20 +34,20 @@ impl Shutdowner {
     }
 
     /// Raise stopped signal from current process
-    pub async fn stopped(&self) -> () {
+    pub async fn stopped(&self) {
         let mut tock_receiver = self.tock_receiver.lock().await;
 
         tock_receiver.close()
     }
 
     /// Get stop signal handle
-    /// 
+    ///
     /// Example:
     /// ```rust
     /// let mut stopper = tick_tock.stop_handle().await.expect("Error occurred while extracting stopper from tick tock");
-    /// 
+    ///
     /// tokio::select!{
-    ///   _ = task_handle => { 
+    ///   _ = task_handle => {
     ///     // task handler
     ///   }
     ///   _ = &mut stopper => {
@@ -67,7 +67,7 @@ impl Shutdowner {
     }
 
     /// Handle process stopping completion
-    pub async fn finished(&self) -> () {
+    pub async fn finished(&self) {
         let mut tock_sender = self.tock_sender.lock().await;
         tock_sender.closed().await
     }

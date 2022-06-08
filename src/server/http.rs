@@ -61,14 +61,14 @@ async fn default_handler(
 ) -> Result<HttpResponse, Error> {
     if body.len() > state.config.server.payload_max_size {
         warn!("request body too large");
-        return Ok(HttpResponse::NoContent().body(""));
+        return Ok(HttpResponse::NoContent().finish());
     }
 
     let req = match Request::new(&state.config.service.request, &req, body) {
         Ok(r) => r,
         Err(e) => {
-            error!("{}: for request: {:?}", e, req);
-            return Err(Error::InternalError);
+            warn!("failed to parse request: {}", e);
+            return Ok(HttpResponse::NoContent().finish());
         }
     };
 

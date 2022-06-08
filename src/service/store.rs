@@ -91,15 +91,10 @@ impl Store {
             }
         };
 
-        let mut chunks_by_topics = match self.chunks_by_topics.lock() {
-            Ok(c) => c,
-            Err(e) => {
-                return Err(Error::InternalError(format!(
-                    "chunks_by_topics.lock(): {}",
-                    e
-                )));
-            }
-        };
+        let mut chunks_by_topics = self
+            .chunks_by_topics
+            .lock()
+            .map_err(|e| Error::InternalError(format!("chunks_by_topics.lock(): {}", e)))?;
 
         match chunks_by_topics.get_mut(topic) {
             Some(chunk) => match chunk.is_full(&request) {
