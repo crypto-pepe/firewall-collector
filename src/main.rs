@@ -3,7 +3,6 @@ use std::sync::Arc;
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::mpsc;
 
-use crate::metrics::init_api_metrics;
 use crate::ticktock::Shutdowner;
 use crate::tracing::init_tracing;
 
@@ -29,8 +28,6 @@ async fn main() -> anyhow::Result<()> {
         serde_json::to_string_pretty(&app_config)?
     );
 
-    let metrics = init_api_metrics();
-
     let shutdowner = Arc::new(Shutdowner::new());
 
     let (kafka_sender, kafka_receiver) = mpsc::channel::<(String, Vec<service::Request>)>(32);
@@ -51,7 +48,7 @@ async fn main() -> anyhow::Result<()> {
         tokio::spawn(async move { service::process(store, kafka_sender, cfg, tick_tock).await })
     };
 
-    let (server, server_handle) = server::Server::run(app_config.server, metrics, data)
+    let (server, server_handle) = server::Server::run(app_config.server, data)
         .map_err(|e| anyhow::anyhow!("server run: {}", e))?;
 
     let mut sigint = signal(SignalKind::interrupt())?;

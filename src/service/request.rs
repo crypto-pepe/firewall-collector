@@ -4,7 +4,7 @@ use actix_web::{web, HttpRequest};
 use deepsize::DeepSizeOf;
 use serde::Serialize;
 
-use crate::config::RequestConfig;
+use crate::{config::RequestConfig, metrics};
 
 #[derive(Debug, Serialize, DeepSizeOf, Clone, PartialEq)]
 pub struct Request {
@@ -67,8 +67,12 @@ impl Request {
                 })
                 .collect(),
             body: String::from_utf8(body.to_vec())
-                .map_err(|e| anyhow::anyhow!("failed to read: {}", e))?,
+                .map_err(|e| anyhow::anyhow!("failed to body read: {}", e))?,
         };
+
+        metrics::HTTP_REQUESTS_TOTAL
+            .with_label_values(&[&req.host, &req.method, &req.remote_ip, &req.path])
+            .inc();
 
         Ok(req)
     }
