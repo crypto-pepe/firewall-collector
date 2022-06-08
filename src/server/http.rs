@@ -67,7 +67,7 @@ async fn default_handler(
     let req = match Request::new(&state.config.service.request, &req, body) {
         Ok(r) => r,
         Err(e) => {
-            warn!("failed parse request: {}", e);
+            warn!("failed to parse request: {}", e);
             return Ok(HttpResponse::NoContent().finish());
         }
     };

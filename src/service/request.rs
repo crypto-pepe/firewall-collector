@@ -66,10 +66,8 @@ impl Request {
                     )
                 })
                 .collect(),
-            body: match String::from_utf8(body.to_vec()) {
-                Ok(s) => s,
-                Err(e) => return Err(anyhow::anyhow!("{}", e.to_string())),
-            },
+            body: String::from_utf8(body.to_vec())
+                .map_err(|e| anyhow::anyhow!("failed to read: {}", e))?,
         };
 
         Ok(req)
