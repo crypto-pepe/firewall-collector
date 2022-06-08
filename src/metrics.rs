@@ -1,17 +1,10 @@
-use std::{ collections::HashMap};
+use lazy_static::lazy_static;
+use prometheus::{opts, register_int_counter_vec, IntCounterVec};
 
-use actix_web_prom::{PrometheusMetrics, PrometheusMetricsBuilder};
-
-pub fn init_api_metrics() -> PrometheusMetrics {
-    match PrometheusMetricsBuilder::new("api")
-        .endpoint("/metrics")
-        .const_labels(HashMap::from([(
-            "service".to_string(),
-            "firewall-collector".to_string(),
-        )]))
-        .build()
-    {
-        Ok(r) => r,
-        Err(e) => panic!("mitrics: {}", e),
-    }
+lazy_static! {
+    pub static ref HTTP_REQUESTS_TOTAL: IntCounterVec = register_int_counter_vec!(
+        opts!("http_requests_total", "HTTP requests total"),
+        &["host", "method", "ip", "path"]
+    )
+    .expect("Can't create a metric");
 }
