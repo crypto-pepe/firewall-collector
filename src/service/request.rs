@@ -7,15 +7,9 @@ use serde::Serialize;
 use crate::{config::RequestConfig, metrics};
 
 #[derive(Debug, Serialize, DeepSizeOf, Clone, PartialEq)]
-pub enum BodyState {
-    Original,
-    Trimmed,
-}
-
-#[derive(Debug, Serialize, DeepSizeOf, Clone, PartialEq)]
-pub struct Body {
-    pub data: String,
-    pub state: BodyState,
+pub enum Body {
+    Original(String),
+    Skipped,
 }
 
 #[derive(Debug, Serialize, DeepSizeOf, Clone, PartialEq)]
@@ -87,35 +81,25 @@ impl Request {
 }
 
 fn body_handle(body: web::Bytes, max_size: usize) -> anyhow::Result<Body> {
-    let mut state = BodyState::Original;
-    let mut b = body.to_vec();
-    if b.len() > max_size {
-        b = b.as_slice()[..max_size].to_vec();
-        state = BodyState::Trimmed;
+    match body.len() > max_size {
+        true => Ok(Body::Skipped),
+        false => Ok(Body::Original(
+            String::from_utf8(body.to_vec())
+                .map_err(|e| anyhow::anyhow!("failed to body read: {}", e))?,
+        )),
     }
-
-    Ok(Body {
-        data: String::from_utf8(b).map_err(|e| anyhow::anyhow!("failed to body read: {}", e))?,
-        state,
-    })
 }
 
 #[cfg(test)]
 mod request_test {
     use actix_web::web;
 
-    use super::{body_handle, Body, BodyState};
+    use super::{body_handle, Body};
 
     #[test]
-    fn body_handle_trim_data_if_too_large() {
+    fn skip_body_if_too_large() {
         let res = body_handle(web::Bytes::from("some body".as_bytes()), 4);
 
-        assert_eq!(
-            res.unwrap(),
-            Body {
-                data: "some".to_string(),
-                state: BodyState::Trimmed
-            }
-        )
+        assert_eq!(res.unwrap(), Body::Skipped)
     }
 }
