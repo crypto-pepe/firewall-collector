@@ -4,7 +4,11 @@ use std::{collections::HashMap, sync::Mutex};
 use thiserror::Error;
 use tracing::error;
 
-use super::{cleaner, Request};
+use super::{
+    cleaner,
+    request::{self},
+    Request,
+};
 
 #[derive(Debug)]
 struct Chunk {
@@ -131,7 +135,12 @@ impl Store {
     fn clean(&self, request: Request) -> Request {
         Request {
             headers: cleaner::headers(request.headers, self.sensitive_headers.clone()),
-            body: cleaner::body(request.body, self.sensitive_json_keys.clone()),
+            body: match request.body {
+                request::Body::Original(b) => {
+                    request::Body::Original(cleaner::body(b, self.sensitive_json_keys.clone()))
+                }
+                request::Body::Skipped => request.body,
+            },
             ..request
         }
     }
@@ -140,7 +149,10 @@ impl Store {
 #[cfg(test)]
 mod store_test {
     use super::{Request, Store};
-    use crate::config::{RequestConfig, ServiceConfig};
+    use crate::{
+        config::{RequestConfig, ServiceConfig},
+        service::request::Body,
+    };
     use pepe_config::DurationString;
     use std::{collections::HashMap, time::Duration};
 
@@ -188,7 +200,7 @@ mod store_test {
         assert!(store.push(Request { ..init_request() }).unwrap().is_none());
         match store
             .push(Request {
-                body: std::iter::repeat("X").take(1024).collect::<String>(),
+                body: Body::Original(std::iter::repeat("X").take(1024).collect::<String>()),
                 ..init_request()
             })
             .unwrap()
@@ -229,6 +241,7 @@ mod store_test {
             request: RequestConfig {
                 host_header: "custom_host_header".to_string(),
                 ip_header: "ip_header".to_string(),
+                body_max_size: 10,
             },
             max_size_chunk: 2048,
             max_len_chunk: 10,
@@ -246,8 +259,8 @@ mod store_test {
             host: String::from(HOST.to_string()),
             method: String::from("POST"),
             path: String::from("/path"),
-            headers: HashMap::from([(String::from("heeader1"), String::from("header value"))]),
-            body: String::from("body"),
+            headers: HashMap::from([(String::from("header1"), String::from("header value"))]),
+            body: Body::Original(String::from("body")),
         }
     }
 }

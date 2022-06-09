@@ -7,6 +7,12 @@ use serde::Serialize;
 use crate::{config::RequestConfig, metrics};
 
 #[derive(Debug, Serialize, DeepSizeOf, Clone, PartialEq)]
+pub enum Body {
+    Original(String),
+    Skipped,
+}
+
+#[derive(Debug, Serialize, DeepSizeOf, Clone, PartialEq)]
 pub struct Request {
     pub timestamp: String,
     pub remote_ip: String,
@@ -14,12 +20,12 @@ pub struct Request {
     pub method: String,
     pub path: String,
     pub headers: HashMap<String, String>,
-    pub body: String,
+    pub body: Body,
 }
 
 impl Request {
     pub fn new(
-        request_config: &RequestConfig,
+        config: &RequestConfig,
         request: &HttpRequest,
         body: web::Bytes,
     ) -> anyhow::Result<Request> {
@@ -28,26 +34,23 @@ impl Request {
             remote_ip: match request
                 .headers()
                 .iter()
-                .find(|(name, _)| name.as_str() == request_config.ip_header)
+                .find(|(name, _)| name.as_str() == config.ip_header)
             {
                 Some((_, value)) => String::from(value.to_str()?),
                 None => {
-                    return Err(anyhow::anyhow!(
-                        "ip_header: {} not found",
-                        request_config.ip_header
-                    ));
+                    return Err(anyhow::anyhow!("ip_header: {} not found", config.ip_header));
                 }
             },
             host: match request
                 .headers()
                 .iter()
-                .find(|(name, _)| name.as_str() == request_config.host_header)
+                .find(|(name, _)| name.as_str() == config.host_header)
             {
                 Some((_, value)) => String::from(value.to_str()?),
                 None => {
                     return Err(anyhow::anyhow!(
                         "host_header: {} not found",
-                        request_config.host_header
+                        config.host_header
                     ));
                 }
             },
@@ -66,8 +69,7 @@ impl Request {
                     )
                 })
                 .collect(),
-            body: String::from_utf8(body.to_vec())
-                .map_err(|e| anyhow::anyhow!("failed to body read: {}", e))?,
+            body: body_handle(body, config.body_max_size)?,
         };
 
         metrics::HTTP_REQUESTS_TOTAL
@@ -75,5 +77,29 @@ impl Request {
             .inc();
 
         Ok(req)
+    }
+}
+
+fn body_handle(body: web::Bytes, max_size: usize) -> anyhow::Result<Body> {
+    match body.len() > max_size {
+        true => Ok(Body::Skipped),
+        false => Ok(Body::Original(
+            String::from_utf8(body.to_vec())
+                .map_err(|e| anyhow::anyhow!("failed to body read: {}", e))?,
+        )),
+    }
+}
+
+#[cfg(test)]
+mod request_test {
+    use actix_web::web;
+
+    use super::{body_handle, Body};
+
+    #[test]
+    fn skip_body_if_too_large() {
+        let res = body_handle(web::Bytes::from("some body".as_bytes()), 4);
+
+        assert_eq!(res.unwrap(), Body::Skipped)
     }
 }

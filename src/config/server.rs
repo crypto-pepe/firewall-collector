@@ -6,7 +6,6 @@ pub struct ServerConfig {
     pub host: String,
     #[serde(default = "default_port")]
     pub port: u16,
-    pub payload_max_size: usize,
 }
 
 fn default_host() -> String {
