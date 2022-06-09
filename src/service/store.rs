@@ -140,7 +140,10 @@ impl Store {
 #[cfg(test)]
 mod store_test {
     use super::{Request, Store};
-    use crate::config::{RequestConfig, ServiceConfig};
+    use crate::{
+        config::{RequestConfig, ServiceConfig},
+        service::request::{Body, BodyState},
+    };
     use pepe_config::DurationString;
     use std::{collections::HashMap, time::Duration};
 
@@ -188,7 +191,10 @@ mod store_test {
         assert!(store.push(Request { ..init_request() }).unwrap().is_none());
         match store
             .push(Request {
-                body: std::iter::repeat("X").take(1024).collect::<String>(),
+                body: Body {
+                    data: std::iter::repeat("X").take(1024).collect::<String>(),
+                    state: BodyState::Original,
+                },
                 ..init_request()
             })
             .unwrap()
@@ -229,6 +235,7 @@ mod store_test {
             request: RequestConfig {
                 host_header: "custom_host_header".to_string(),
                 ip_header: "ip_header".to_string(),
+                body_max_size: 10,
             },
             max_size_chunk: 2048,
             max_len_chunk: 10,
@@ -246,8 +253,11 @@ mod store_test {
             host: String::from(HOST.to_string()),
             method: String::from("POST"),
             path: String::from("/path"),
-            headers: HashMap::from([(String::from("heeader1"), String::from("header value"))]),
-            body: String::from("body"),
+            headers: HashMap::from([(String::from("header1"), String::from("header value"))]),
+            body: Body {
+                data: String::from("body"),
+                state: BodyState::Original,
+            },
         }
     }
 }

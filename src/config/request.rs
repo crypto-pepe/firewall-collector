@@ -4,4 +4,5 @@ use serde::{Deserialize, Serialize};
 pub struct RequestConfig {
     pub host_header: String,
     pub ip_header: String,
+    pub body_max_size: usize,
 }

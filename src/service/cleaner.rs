@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use serde_json::{Map, Value};
 
+use super::request;
+
 pub fn headers(
     headers: HashMap<String, String>,
     headers_name_to_filter: Vec<String>,
@@ -14,17 +16,22 @@ pub fn headers(
 
 // The function deletes values by keys if the body is a json.
 // In the case body is non-json, body is deleted if at least one of the keys is found by full-text search.
-pub fn body(body: String, keys: Vec<String>) -> String {
-    match serde_json::from_str::<Map<String, Value>>(&body) {
+pub fn body(body: request::Body, keys: Vec<String>) -> request::Body {
+    let data = match serde_json::from_str::<Map<String, Value>>(&body.data) {
         Ok(data) => {
             let mut ob = Value::Object(data);
             json(&mut ob, keys);
             ob.to_string()
         }
-        Err(_) => match keys.into_iter().find(|k| body.contains(k)) {
-            None => body,
+        Err(_) => match keys.into_iter().find(|k| body.data.contains(k)) {
+            None => body.data,
             _ => "".to_string(),
         },
+    };
+
+    request::Body {
+        data,
+        state: body.state,
     }
 }
 
@@ -39,7 +46,7 @@ fn json(value: &mut Value, keys: Vec<String>) {
 mod cleaner_test {
     use std::collections::HashMap;
 
-    use crate::service::cleaner::json;
+    use crate::service::{cleaner::json, request};
 
     use super::{body, headers};
 
@@ -77,26 +84,51 @@ mod cleaner_test {
     fn body_without_found_key_in_json() {
         let raw = r#" { "name": "John Doe", "age": 43 } "#;
 
-        let res = body(raw.to_string(), Vec::from(["age".to_string()]));
+        let res = body(
+            request::Body {
+                data: raw.to_string(),
+                ..body_init()
+            },
+            Vec::from(["age".to_string()]),
+        );
 
-        assert_eq!(r#"{"name":"John Doe"}"#, res);
+        assert_eq!(r#"{"name":"John Doe"}"#, res.data);
     }
 
     #[test]
     fn empty_if_body_not_json() {
         let exp = r#" "name": "John Doe", "age": 43 } "#;
 
-        let res = body(exp.to_string(), Vec::from(["age".to_string()]));
+        let res = body(
+            request::Body {
+                data: exp.to_string(),
+                ..body_init()
+            },
+            Vec::from(["age".to_string()]),
+        );
 
-        assert_eq!(res, "")
+        assert_eq!(res.data, "")
     }
 
     #[test]
     fn empty_body_if_found_key_in_not_json() {
         let exp = r#" : this not json "name" this not json  "#;
 
-        let res = body(exp.to_string(), Vec::from(["name".to_string()]));
+        let res = body(
+            request::Body {
+                data: exp.to_string(),
+                ..body_init()
+            },
+            Vec::from(["name".to_string()]),
+        );
 
-        assert_eq!(res, "")
+        assert_eq!(res.data, "")
+    }
+
+    fn body_init() -> request::Body {
+        request::Body {
+            data: "some data".to_string(),
+            state: request::BodyState::Original,
+        }
     }
 }
